@@ -21,7 +21,7 @@ const messaging = firebase.messaging()
 messaging.onBackgroundMessage((payload) => {
   console.log("Background message received:", payload)
 
-  const notificationTitle = payload.notification?.title || "AlumniConnect"
+  const notificationTitle = payload.notification?.title || "KonvoGrad"
   const notificationOptions = {
     body: payload.notification?.body || "You have a new notification",
     icon: "/icon-192x192.png",

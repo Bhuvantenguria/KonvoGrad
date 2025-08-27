@@ -19,7 +19,7 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
-  title: "AlumniConnect - Professional Networking Platform",
+  title: "KonvoGrad - Professional Networking Platform",
   description: "Connect with alumni and developers through random matching and professional networking",
   generator: "v0.app",
 }

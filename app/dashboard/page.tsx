@@ -58,7 +58,7 @@ export default function DashboardPage() {
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <Users className="w-5 h-5 text-primary-foreground" />
               </div>
-              <span className="font-serif font-bold text-xl text-foreground">AlumniConnect</span>
+              <span className="font-serif font-bold text-xl text-foreground">KonvoGrad</span>
             </div>
             <div className="flex items-center space-x-4">
               <Button variant="ghost" className="font-medium" asChild>
@@ -314,7 +314,7 @@ export default function DashboardPage() {
                   className="w-full bg-transparent"
                   variant="outline"
                   onClick={() =>
-                    copyToClipboard(`Join me on AlumniConnect: ${firebaseUser?.inviteCode || ""}`, "Invite link")
+                    copyToClipboard(`Join me on KonvoGrad: ${firebaseUser?.inviteCode || ""}`, "Invite link")
                   }
                 >
                   <UserPlus className="w-4 h-4 mr-2" />

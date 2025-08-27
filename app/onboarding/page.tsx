@@ -86,7 +86,7 @@ export default function OnboardingPage() {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <Users className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="font-serif font-bold text-xl text-foreground">AlumniConnect</span>
+            <span className="font-serif font-bold text-xl text-foreground">KonvoGrad</span>
           </Link>
           <h1 className="font-serif font-bold text-2xl text-foreground">Complete Your Profile</h1>
           <p className="text-muted-foreground">Help us connect you with the right professionals</p>
