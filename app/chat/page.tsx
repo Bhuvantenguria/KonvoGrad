@@ -24,26 +24,33 @@ import {
   Bell,
   ArrowLeft,
   Loader2,
+  Shield,
+  Crown,
+  Heart,
+  Star
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { SharedNavigation } from "@/components/ui/shared-navigation"
+import { useTheme } from "@/components/theme-provider"
 
 export default function ChatPage() {
-  const router = useRouter()
   const { firebaseUser, loading: userLoading } = useFirebaseUser()
-  const {
-    chatRooms,
-    currentChatRoom,
-    messages,
-    loading: chatLoading,
-    sendChatMessage,
-    selectChatRoom,
-  } = useChat(firebaseUser?.id || "")
-  const [messageText, setMessageText] = useState("")
+  const { chatRooms, currentChatRoom, messages, loading: chatLoading, sendChatMessage, selectChatRoom } = useChat(firebaseUser?.id || "")
+  const router = useRouter()
+  const { currentTheme, isDarkMode } = useTheme()
+
   const [searchQuery, setSearchQuery] = useState("")
+  const [messageText, setMessageText] = useState("")
   const [isMobileView, setIsMobileView] = useState(false)
+
+  const filteredChatRooms = chatRooms.filter((room) =>
+    Object.values(room.participantDetails).some((participant: any) =>
+      participant.name?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  )
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -68,161 +75,115 @@ export default function ChatPage() {
     }
   }
 
-  const filteredChatRooms = chatRooms.filter((room) => {
-    if (!searchQuery) return true
-    const participantNames = Object.values(room.participantDetails).map((p) => p.name.toLowerCase())
-    return participantNames.some((name) => name.includes(searchQuery.toLowerCase()))
-  })
-
-  const formatMessageTime = (timestamp: any) => {
-    if (!timestamp) return ""
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
-    return formatDistanceToNow(date, { addSuffix: true })
-  }
-
   if (userLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex items-center space-x-2">
-          <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          <span className="text-muted-foreground">Loading chat...</span>
+      <div className={`min-h-screen ${isDarkMode ? currentTheme.darkBackground : currentTheme.background} flex items-center justify-center`}>
+        <div className="flex items-center space-x-3">
+          <div className={`w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin`}></div>
+          <span className="text-foreground font-medium">Loading chat...</span>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <Link href="/dashboard" className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                  <Users className="w-5 h-5 text-primary-foreground" />
-                </div>
-                <span className="font-serif font-bold text-xl text-foreground">KonvoGrad</span>
-              </Link>
-              {currentChatRoom && (
-                <div className="hidden md:flex items-center space-x-2 ml-8">
-                  <Badge variant="secondary">Chat Active</Badge>
-                  <span className="text-sm text-muted-foreground">
-                    {Object.values(currentChatRoom.participantDetails)
-                      .filter((p) => p.name !== `${firebaseUser?.firstName} ${firebaseUser?.lastName}`)
-                      .map((p) => p.name)
-                      .join(", ")}
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="icon">
-                <Bell className="w-5 h-5" />
-              </Button>
-              <Button variant="ghost" size="icon">
-                <Settings className="w-5 h-5" />
-              </Button>
-              <Avatar className="w-8 h-8">
-                <AvatarImage src={firebaseUser?.imageUrl || "/placeholder.svg"} />
-                <AvatarFallback>
-                  {firebaseUser?.firstName?.[0]}
-                  {firebaseUser?.lastName?.[0]}
-                </AvatarFallback>
-              </Avatar>
-            </div>
-          </div>
-        </div>
-      </nav>
+    <div className={`min-h-screen ${isDarkMode ? currentTheme.darkBackground : currentTheme.background} transition-all duration-500`}>
+      <SharedNavigation currentPage="chat" />
 
       <div className="flex h-[calc(100vh-4rem)]">
         {/* Chat Rooms Sidebar */}
         <div
           className={cn(
-            "w-80 border-r border-border bg-card/30 flex flex-col",
+            "w-80 border-r-2 border-border/20 bg-card/30 flex flex-col",
             isMobileView && currentChatRoom ? "hidden" : "flex",
           )}
         >
           {/* Sidebar Header */}
-          <div className="p-4 border-b border-border">
+          <div className="p-4 border-b-2 border-border/20">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-serif font-semibold text-lg">Messages</h2>
-              <Button size="sm" variant="outline">
+              <div className="flex items-center space-x-3">
+                <div className={`w-8 h-8 bg-gradient-to-r ${currentTheme.primary} rounded-lg flex items-center justify-center`}>
+                  <MessageCircle className="w-4 h-4 text-white" />
+                </div>
+                <h2 className="font-bold text-lg text-foreground">Messages</h2>
+              </div>
+              <Button size="sm" variant="outline" className={`border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`}>
                 <MessageCircle className="w-4 h-4 mr-2" />
                 New Chat
               </Button>
             </div>
+
+            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search conversations..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="pl-10 bg-muted/50 border-border/20 text-foreground placeholder-muted-foreground"
               />
             </div>
           </div>
 
-          {/* Chat Rooms List */}
+          {/* Chat Room List */}
           <ScrollArea className="flex-1">
-            <div className="p-2">
-              {chatLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                </div>
-              ) : filteredChatRooms.length > 0 ? (
-                <div className="space-y-1">
-                  {filteredChatRooms.map((room) => {
-                    const otherParticipant = Object.values(room.participantDetails).find(
-                      (p) => p.name !== `${firebaseUser?.firstName} ${firebaseUser?.lastName}`,
-                    )
-                    const isSelected = currentChatRoom?.id === room.id
+            {chatLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : filteredChatRooms.length > 0 ? (
+              <div className="space-y-2">
+                {filteredChatRooms.map((room) => {
+                  const otherParticipant = Object.values(room.participantDetails).find(
+                    (p: any) => p.name !== `${firebaseUser?.firstName} ${firebaseUser?.lastName}`
+                  ) as any
 
-                    return (
-                      <div
-                        key={room.id}
-                        onClick={() => {
-                          selectChatRoom(room)
-                          setIsMobileView(true)
-                        }}
-                        className={cn(
-                          "flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors",
-                          isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50",
-                        )}
-                      >
-                        <Avatar className="w-12 h-12">
-                          <AvatarImage src={otherParticipant?.imageUrl || "/placeholder.svg"} />
-                          <AvatarFallback>{otherParticipant?.name?.[0] || "U"}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <p className="font-medium text-sm truncate">{otherParticipant?.name || "Unknown User"}</p>
-                            {room.lastMessage && (
-                              <span className="text-xs text-muted-foreground">
-                                {formatMessageTime(room.lastMessage.timestamp)}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">{otherParticipant?.role || "Professional"}</p>
-                          {room.lastMessage && (
-                            <p className="text-xs text-muted-foreground truncate mt-1">{room.lastMessage.text}</p>
-                          )}
-                        </div>
-                        {room.isActive && <div className="w-2 h-2 bg-green-500 rounded-full"></div>}
+                  const isSelected = currentChatRoom?.id === room.id
+
+                  return (
+                    <div
+                      key={room.id}
+                      onClick={() => {
+                        selectChatRoom(room)
+                        setIsMobileView(true)
+                      }}
+                      className={cn(
+                        "flex items-center space-x-3 p-3 rounded-xl cursor-pointer transition-all duration-200",
+                        isSelected 
+                          ? `bg-gradient-to-r ${currentTheme.primary} text-white shadow-lg` 
+                          : `${isDarkMode ? 'bg-slate-800/50 hover:bg-slate-800/70' : 'bg-white/50 hover:bg-white/70'} backdrop-blur-sm`
+                      )}
+                    >
+                      <Avatar className="w-12 h-12 border-2 border-border/20">
+                        <AvatarImage src={otherParticipant?.imageUrl || "/placeholder.svg"} />
+                        <AvatarFallback className="bg-gradient-to-r from-white to-gray-200 font-bold">
+                          {otherParticipant?.name?.[0] || "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{otherParticipant?.name || "Unknown User"}</p>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {room.lastMessage?.text || "No messages yet"}
+                        </p>
                       </div>
-                    )
-                  })}
+                      {room.isActive && (
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className={`w-16 h-16 bg-gradient-to-r ${currentTheme.primary} rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg`}>
+                  <MessageCircle className="w-8 h-8 text-white" />
                 </div>
-              ) : (
-                <div className="text-center py-8">
-                  <MessageCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground text-sm">No conversations yet</p>
-                  <Button variant="ghost" size="sm" className="mt-2">
-                    Start a new chat
-                  </Button>
-                </div>
-              )}
-            </div>
+                <p className="text-muted-foreground text-sm mb-4">No conversations yet</p>
+                <Button variant="ghost" size="sm" className={`${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`}>
+                  Start a new chat
+                </Button>
+              </div>
+            )}
           </ScrollArea>
         </div>
 
@@ -231,85 +192,87 @@ export default function ChatPage() {
           {currentChatRoom ? (
             <>
               {/* Chat Header */}
-              <div className="p-4 border-b border-border bg-card/30 flex items-center justify-between">
+              <div className={`p-4 border-b-2 border-border/20 ${isDarkMode ? 'bg-slate-800/50' : 'bg-white/50'} backdrop-blur-sm flex items-center justify-between`}>
                 <div className="flex items-center space-x-3">
-                  <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setIsMobileView(false)}>
+                  <Button variant="ghost" size="icon" className="md:hidden hover:scale-110 transition-transform duration-200" onClick={() => setIsMobileView(false)}>
                     <ArrowLeft className="w-5 h-5" />
                   </Button>
-                  <Avatar className="w-10 h-10">
+                  <Avatar className="w-10 h-10 border-2 border-border/20">
                     <AvatarImage src="/placeholder.svg" />
-                    <AvatarFallback>
+                    <AvatarFallback className="bg-gradient-to-r from-white to-gray-200 font-bold">
                       {Object.values(currentChatRoom.participantDetails).find(
-                        (p) => p.name !== `${firebaseUser?.firstName} ${firebaseUser?.lastName}`,
+                        (p: any) => p.name !== `${firebaseUser?.firstName} ${firebaseUser?.lastName}`,
                       )?.name?.[0] || "U"}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium">
+                    <p className="font-medium text-foreground">
                       {Object.values(currentChatRoom.participantDetails)
-                        .filter((p) => p.name !== `${firebaseUser?.firstName} ${firebaseUser?.lastName}`)
-                        .map((p) => p.name)
+                        .filter((p: any) => p.name !== `${firebaseUser?.firstName} ${firebaseUser?.lastName}`)
+                        .map((p: any) => p.name)
                         .join(", ")}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {Object.values(currentChatRoom.participantDetails)
-                        .filter((p) => p.name !== `${firebaseUser?.firstName} ${firebaseUser?.lastName}`)
-                        .map((p) => p.role)
-                        .join(", ")}
+                      {currentChatRoom.isActive ? "Online" : "Offline"}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" className={`${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}>
                     <Phone className="w-5 h-5" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={handleVideoCall}>
+                  <Button variant="ghost" size="icon" onClick={handleVideoCall} className={`${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}>
                     <Video className="w-5 h-5" />
                   </Button>
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" className={`${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}>
                     <MoreVertical className="w-5 h-5" />
                   </Button>
                 </div>
               </div>
 
-              {/* Messages Area */}
+              {/* Messages */}
               <ScrollArea className="flex-1 p-4">
                 <div className="space-y-4">
                   {messages.length > 0 ? (
                     messages.map((message) => {
                       const isOwnMessage = message.senderId === firebaseUser?.id
-
                       return (
                         <div
                           key={message.id}
-                          className={cn("flex items-end space-x-2", isOwnMessage ? "justify-end" : "justify-start")}
+                          className={cn(
+                            "flex items-end space-x-2",
+                            isOwnMessage ? "justify-end" : "justify-start"
+                          )}
                         >
                           {!isOwnMessage && (
-                            <Avatar className="w-8 h-8">
-                              <AvatarFallback className="text-xs">{message.senderName?.[0] || "U"}</AvatarFallback>
+                            <Avatar className="w-8 h-8 border-2 border-border/20">
+                              <AvatarFallback className="text-xs bg-gradient-to-r from-white to-gray-200 font-bold">
+                                {message.senderName?.[0] || "U"}
+                              </AvatarFallback>
                             </Avatar>
                           )}
                           <div
                             className={cn(
-                              "max-w-xs lg:max-w-md px-4 py-2 rounded-lg",
-                              isOwnMessage ? "bg-primary text-primary-foreground" : "bg-muted",
+                              "max-w-xs lg:max-w-md px-4 py-2 rounded-xl shadow-lg",
+                              isOwnMessage 
+                                ? `bg-gradient-to-r ${currentTheme.primary} text-white` 
+                                : `${isDarkMode ? 'bg-slate-800/50' : 'bg-white/50'} backdrop-blur-sm text-foreground border-2 border-border/20`
                             )}
                           >
-                            {!isOwnMessage && <p className="text-xs font-medium mb-1">{message.senderName}</p>}
                             <p className="text-sm">{message.text}</p>
                             <p
                               className={cn(
                                 "text-xs mt-1",
-                                isOwnMessage ? "text-primary-foreground/70" : "text-muted-foreground",
+                                isOwnMessage ? "text-white/70" : "text-muted-foreground",
                               )}
                             >
-                              {formatMessageTime(message.timestamp)}
+                              {formatDistanceToNow(message.timestamp.toDate ? message.timestamp.toDate() : new Date(message.timestamp), { addSuffix: true })}
                             </p>
                           </div>
                           {isOwnMessage && (
-                            <Avatar className="w-8 h-8">
+                            <Avatar className="w-8 h-8 border-2 border-border/20">
                               <AvatarImage src={firebaseUser?.imageUrl || "/placeholder.svg"} />
-                              <AvatarFallback className="text-xs">
+                              <AvatarFallback className="text-xs bg-gradient-to-r from-white to-gray-200 font-bold">
                                 {firebaseUser?.firstName?.[0]}
                                 {firebaseUser?.lastName?.[0]}
                               </AvatarFallback>
@@ -320,7 +283,9 @@ export default function ChatPage() {
                     })
                   ) : (
                     <div className="text-center py-8">
-                      <MessageCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                      <div className={`w-16 h-16 bg-gradient-to-r ${currentTheme.primary} rounded-full flex items-center justify-center mx-auto shadow-lg`}>
+                        <MessageCircle className="w-8 h-8 text-white" />
+                      </div>
                       <p className="text-muted-foreground">Start the conversation!</p>
                     </div>
                   )}
@@ -328,45 +293,44 @@ export default function ChatPage() {
               </ScrollArea>
 
               {/* Message Input */}
-              <div className="p-4 border-t border-border bg-card/30">
+              <div className={`p-4 border-t-2 border-border/20 ${isDarkMode ? 'bg-slate-800/50' : 'bg-white/50'} backdrop-blur-sm`}>
                 <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
-                  <Button type="button" variant="ghost" size="icon">
+                  <Button type="button" variant="ghost" size="icon" className={`${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}>
                     <Paperclip className="w-5 h-5" />
                   </Button>
-                  <div className="flex-1 relative">
+                  <div className="relative flex-1">
                     <Input
                       placeholder="Type a message..."
                       value={messageText}
                       onChange={(e) => setMessageText(e.target.value)}
-                      className="pr-12"
+                      className="pr-12 bg-muted/50 border-border/20 text-foreground placeholder-muted-foreground"
                     />
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="absolute right-1 top-1/2 transform -translate-y-1/2"
+                      className={`absolute right-1 top-1/2 transform -translate-y-1/2 ${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}
                     >
                       <Smile className="w-4 h-4" />
                     </Button>
                   </div>
-                  <Button type="submit" disabled={!messageText.trim()}>
+                  <Button type="submit" disabled={!messageText.trim()} className={`bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 text-white hover:scale-110 transition-transform duration-200`}>
                     <Send className="w-4 h-4" />
                   </Button>
                 </form>
               </div>
             </>
           ) : (
-            /* No Chat Selected */
-            <div className="flex-1 flex items-center justify-center bg-muted/20">
+            <div className="flex-1 flex items-center justify-center">
               <div className="text-center space-y-4">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
-                  <MessageCircle className="w-8 h-8 text-primary" />
+                <div className={`w-16 h-16 bg-gradient-to-r ${currentTheme.primary} rounded-full flex items-center justify-center mx-auto shadow-lg`}>
+                  <MessageCircle className="w-8 h-8 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-serif font-semibold text-lg mb-2">Select a conversation</h3>
+                  <h3 className="font-bold text-lg mb-2 text-foreground">Select a conversation</h3>
                   <p className="text-muted-foreground text-sm">Choose a chat from the sidebar to start messaging</p>
                 </div>
-                <Button variant="outline">
+                <Button variant="outline" className={`border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`}>
                   <MessageCircle className="w-4 h-4 mr-2" />
                   Start New Chat
                 </Button>

@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react"
 import {
-  joinMatchingQueue,
-  leaveMatchingQueue,
-  findRandomMatch,
-  createMatchAndChatRoom,
-  getMatchingQueueStatus,
+  joinMatchingQueueClient,
+  leaveMatchingQueueClient,
+  findRandomMatchClient,
+  createMatchAndChatRoomClient,
+  getMatchingQueueStatusClient,
   type MatchingQueue,
-} from "@/lib/firebase-utils"
+} from "@/lib/firebase-client-utils"
 
 export function useMatching(userId: string, userDetails: MatchingQueue["userDetails"]) {
   const [isSearching, setIsSearching] = useState(false)
@@ -20,7 +20,7 @@ export function useMatching(userId: string, userDetails: MatchingQueue["userDeta
   useEffect(() => {
     if (!userId) return
 
-    const unsubscribe = getMatchingQueueStatus(userId, (status) => {
+    const unsubscribe = getMatchingQueueStatusClient(userId, (status) => {
       setMatchingStatus(status)
 
       if (status?.status === "matched" && status.chatRoomId) {
@@ -47,16 +47,16 @@ export function useMatching(userId: string, userDetails: MatchingQueue["userDeta
         setMatchFound(null)
 
         // Join matching queue
-        await joinMatchingQueue(userId, userDetails, preferences)
+        await joinMatchingQueueClient(userId, userDetails, preferences)
 
         // Start polling for matches
         const pollForMatch = async () => {
           try {
-            const match = await findRandomMatch(userId, preferences)
+            const match = await findRandomMatchClient(userId, preferences)
 
             if (match) {
               // Create chat room with the match
-              const chatRoomId = await createMatchAndChatRoom(userId, match.userId, userDetails, match.userDetails)
+              const chatRoomId = await createMatchAndChatRoomClient(userId, match.userId, userDetails, match.userDetails)
 
               setMatchFound(chatRoomId)
               setIsSearching(false)
@@ -86,7 +86,7 @@ export function useMatching(userId: string, userDetails: MatchingQueue["userDeta
     if (!userId) return
 
     try {
-      await leaveMatchingQueue(userId)
+      await leaveMatchingQueueClient(userId)
       setIsSearching(false)
       setMatchFound(null)
       setError(null)

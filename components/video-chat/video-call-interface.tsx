@@ -1,12 +1,40 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { useVideoCall } from "@/hooks/use-video-call"
-import { Video, VideoOff, Mic, MicOff, Phone, PhoneOff, Monitor } from "lucide-react"
+import { useTheme } from "@/components/theme-provider"
+import { 
+  Video, 
+  VideoOff, 
+  Mic, 
+  MicOff, 
+  Phone, 
+  PhoneOff, 
+  Send, 
+  MessageCircle, 
+  Shuffle, 
+  Settings,
+  Users,
+  Sparkles,
+  Zap,
+  Heart,
+  Star,
+  Crown,
+  Shield,
+  Camera,
+  Headphones,
+  Wifi,
+  WifiOff,
+  Moon,
+  Sun,
+  Palette
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface VideoCallInterfaceProps {
@@ -16,6 +44,7 @@ interface VideoCallInterfaceProps {
   remoteUserName: string
   remoteUserAvatar?: string
   onCallEnd?: () => void
+  onNextMatch?: () => void
 }
 
 export function VideoCallInterface({
@@ -25,28 +54,31 @@ export function VideoCallInterface({
   remoteUserName,
   remoteUserAvatar,
   onCallEnd,
+  onNextMatch
 }: VideoCallInterfaceProps) {
-  const localVideoRef = useRef<HTMLVideoElement>(null)
-  const remoteVideoRef = useRef<HTMLVideoElement>(null)
-
+  const { currentTheme, isDarkMode } = useTheme()
   const {
-    isCallActive,
-    isIncomingCall,
     localStream,
     remoteStream,
-    isAudioEnabled,
-    isVideoEnabled,
-    error,
     callStatus,
+    isVideoEnabled,
+    isAudioEnabled,
     startCall,
-    acceptCall,
-    rejectCall,
     endCall,
-    toggleAudio,
     toggleVideo,
+    toggleAudio,
+    messages,
+    sendMessage,
+    messageText,
+    setMessageText,
+    showChat,
+    toggleChat
   } = useVideoCall(chatRoomId, userId, remoteUserId)
 
-  // Set up video streams
+  const localVideoRef = useRef<HTMLVideoElement>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream
@@ -59,199 +91,300 @@ export function VideoCallInterface({
     }
   }, [remoteStream])
 
-  const handleEndCall = async () => {
-    await endCall()
-    if (onCallEnd) {
-      onCallEnd()
+  const getStatusIcon = () => {
+    switch (callStatus) {
+      case "idle":
+        return <Phone className="w-5 h-5" />
+      case "calling":
+        return <Phone className="w-5 h-5 animate-pulse" />
+      case "ringing":
+        return <Phone className="w-5 h-5 animate-bounce" />
+      case "connected":
+        return <Video className="w-5 h-5" />
+      case "ended":
+        return <PhoneOff className="w-5 h-5" />
+      default:
+        return <Phone className="w-5 h-5" />
     }
   }
 
-  if (error) {
-    return (
-      <Card className="p-6 text-center">
-        <div className="space-y-4">
-          <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto">
-            <VideoOff className="w-8 h-8 text-destructive" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-lg">Call Failed</h3>
-            <p className="text-sm text-muted-foreground">{error}</p>
-          </div>
-          <Button variant="outline" onClick={() => window.location.reload()}>
-            Try Again
-          </Button>
-        </div>
-      </Card>
-    )
+  const getStatusText = () => {
+    switch (callStatus) {
+      case "idle":
+        return "Ready to Connect"
+      case "calling":
+        return "Calling..."
+      case "ringing":
+        return "Incoming Call"
+      case "connected":
+        return "Connected"
+      case "ended":
+        return "Call Ended"
+      default:
+        return "Connecting..."
+    }
   }
 
-  if (isIncomingCall) {
-    return (
-      <Card className="p-6 text-center">
-        <div className="space-y-4">
-          <Avatar className="w-20 h-20 mx-auto">
-            <AvatarImage src={remoteUserAvatar || "/placeholder.svg"} />
-            <AvatarFallback className="text-lg">{remoteUserName?.[0] || "U"}</AvatarFallback>
-          </Avatar>
-          <div>
-            <h3 className="font-semibold text-lg">{remoteUserName}</h3>
-            <p className="text-sm text-muted-foreground">Incoming video call...</p>
-          </div>
-          <div className="flex space-x-4 justify-center">
-            <Button onClick={acceptCall} className="bg-green-600 hover:bg-green-700">
-              <Phone className="w-4 h-4 mr-2" />
-              Accept
-            </Button>
-            <Button variant="destructive" onClick={rejectCall}>
-              <PhoneOff className="w-4 h-4 mr-2" />
-              Decline
-            </Button>
-          </div>
-        </div>
-      </Card>
-    )
-  }
-
-  if (!isCallActive && callStatus === "idle") {
-    return (
-      <Card className="p-6 text-center">
-        <div className="space-y-4">
-          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
-            <Video className="w-8 h-8 text-primary" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-lg">Start Video Call</h3>
-            <p className="text-sm text-muted-foreground">Connect face-to-face with {remoteUserName}</p>
-          </div>
-          <Button onClick={startCall} size="lg">
-            <Video className="w-4 h-4 mr-2" />
-            Start Video Call
-          </Button>
-        </div>
-      </Card>
-    )
-  }
-
-  if (callStatus === "calling") {
-    return (
-      <Card className="p-6 text-center">
-        <div className="space-y-4">
-          <Avatar className="w-20 h-20 mx-auto">
-            <AvatarImage src={remoteUserAvatar || "/placeholder.svg"} />
-            <AvatarFallback className="text-lg">{remoteUserName?.[0] || "U"}</AvatarFallback>
-          </Avatar>
-          <div>
-            <h3 className="font-semibold text-lg">Calling {remoteUserName}...</h3>
-            <p className="text-sm text-muted-foreground">Waiting for them to answer</p>
-          </div>
-          <div className="flex space-x-1 justify-center">
-            <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
-            <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
-            <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
-          </div>
-          <Button variant="destructive" onClick={handleEndCall}>
-            <PhoneOff className="w-4 h-4 mr-2" />
-            Cancel Call
-          </Button>
-        </div>
-      </Card>
-    )
-  }
-
-  if (callStatus === "ended") {
-    return (
-      <Card className="p-6 text-center">
-        <div className="space-y-4">
-          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto">
-            <PhoneOff className="w-8 h-8 text-muted-foreground" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-lg">Call Ended</h3>
-            <p className="text-sm text-muted-foreground">The video call has ended</p>
-          </div>
-        </div>
-      </Card>
-    )
-  }
-
-  // Active call interface
   return (
-    <div className="relative w-full h-full bg-black rounded-lg overflow-hidden">
-      {/* Remote video (main) */}
-      <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+    <div className={`min-h-screen ${isDarkMode ? currentTheme.darkBackground : currentTheme.background} transition-all duration-500`}>
+      <div className="relative h-screen overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-accent/20"></div>
+          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent)]"></div>
+        </div>
 
-      {/* Local video (picture-in-picture) */}
-      <div className="absolute top-4 right-4 w-48 h-36 bg-gray-900 rounded-lg overflow-hidden border-2 border-white/20">
-        <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-        {!isVideoEnabled && (
-          <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
-            <Avatar className="w-16 h-16">
-              <AvatarFallback>You</AvatarFallback>
-            </Avatar>
+        {/* Header */}
+        <div className={`absolute top-0 left-0 right-0 z-10 p-4 ${isDarkMode ? currentTheme.darkCard : currentTheme.card} border-b-2 border-border/20`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className={`w-10 h-10 bg-gradient-to-r ${currentTheme.primary} rounded-xl flex items-center justify-center shadow-lg`}>
+                <Video className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="font-bold text-lg text-foreground">Video Chat</h1>
+                <p className="text-sm text-muted-foreground">Session: {chatRoomId.slice(-8)}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Badge className={`bg-gradient-to-r ${currentTheme.primary} text-white`}>
+                <Shield className="w-3 h-3 mr-1" />
+                {remoteUserName}
+              </Badge>
+              <Badge variant="outline" className="border-2 border-border/20">
+                <Star className="w-3 h-3 mr-1" />
+                {callStatus}
+              </Badge>
+            </div>
           </div>
+        </div>
+
+        {/* Main Video Area */}
+        <div className="pt-20 h-full flex">
+          {/* Remote Video */}
+          <div className="flex-1 relative">
+            {remoteStream ? (
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover"
+                onDoubleClick={() => setIsFullscreen(!isFullscreen)}
+              />
+            ) : (
+              <div className={`w-full h-full flex items-center justify-center ${isDarkMode ? currentTheme.darkCard : currentTheme.card} border-2 border-border/20`}>
+                <div className="text-center space-y-4">
+                  <div className={`w-24 h-24 bg-gradient-to-r ${currentTheme.primary} rounded-full flex items-center justify-center mx-auto shadow-lg`}>
+                    <Users className="w-12 h-12 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-foreground">{remoteUserName}</h3>
+                    <p className="text-muted-foreground">{getStatusText()}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Local Video (Picture-in-Picture) */}
+            {localStream && (
+              <div className="absolute bottom-4 right-4 w-48 h-36 rounded-xl overflow-hidden shadow-2xl border-2 border-white/20">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-2 left-2">
+                  <Badge variant="secondary" className="text-xs">
+                    You
+                  </Badge>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Chat Sidebar */}
+          {showChat && (
+            <div className={`w-80 ${isDarkMode ? currentTheme.darkChat : currentTheme.chat} border-l-2 border-border/20`}>
+              <div className="h-full flex flex-col">
+                {/* Chat Header */}
+                <div className="p-4 border-b-2 border-border/20">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-foreground">Chat</h3>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={toggleChat}
+                      className="hover:scale-110 transition-transform duration-200"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Messages */}
+                <ScrollArea className="flex-1 p-4">
+                  <div className="space-y-4">
+                    {messages.map((message, index) => (
+                      <div
+                        key={index}
+                        className={`flex ${message.senderId === userId ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`max-w-xs px-3 py-2 rounded-lg ${
+                            message.senderId === userId
+                              ? `bg-gradient-to-r ${currentTheme.primary} text-white`
+                              : `${isDarkMode ? 'bg-slate-700/50' : 'bg-white/50'} text-foreground border-2 border-border/20`
+                          }`}
+                        >
+                          <p className="text-sm">{message.text}</p>
+                          <p className="text-xs opacity-70 mt-1">
+                            {new Date(message.timestamp).toLocaleTimeString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+
+                {/* Message Input */}
+                <div className="p-4 border-t-2 border-border/20">
+                  <div className="flex space-x-2">
+                    <Input
+                      value={messageText}
+                      onChange={(e) => setMessageText(e.target.value)}
+                      placeholder="Type a message..."
+                      className="flex-1 border-2 border-border/20 bg-muted/50"
+                      onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                    />
+                    <Button
+                      onClick={sendMessage}
+                      disabled={!messageText.trim()}
+                      className={`bg-gradient-to-r ${currentTheme.primary} text-white hover:scale-105 transition-transform duration-200`}
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Control Bar */}
+        <div className={`absolute bottom-0 left-0 right-0 p-4 ${isDarkMode ? currentTheme.darkCard : currentTheme.card} border-t-2 border-border/20`}>
+          <div className="flex items-center justify-center space-x-4">
+            {/* Video Toggle */}
+            <Button
+              onClick={toggleVideo}
+              variant="outline"
+              size="icon"
+              className={`w-12 h-12 rounded-full border-2 border-border/20 hover:scale-110 transition-transform duration-200 ${
+                isVideoEnabled 
+                  ? `bg-gradient-to-r ${currentTheme.primary} text-white` 
+                  : 'bg-red-500 text-white'
+              }`}
+            >
+              {isVideoEnabled ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+            </Button>
+
+            {/* Audio Toggle */}
+            <Button
+              onClick={toggleAudio}
+              variant="outline"
+              size="icon"
+              className={`w-12 h-12 rounded-full border-2 border-border/20 hover:scale-110 transition-transform duration-200 ${
+                isAudioEnabled 
+                  ? `bg-gradient-to-r ${currentTheme.secondary} text-white` 
+                  : 'bg-red-500 text-white'
+              }`}
+            >
+              {isAudioEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+            </Button>
+
+            {/* Call Controls */}
+            {callStatus === "idle" ? (
+              <Button
+                onClick={startCall}
+                className={`w-16 h-16 rounded-full bg-gradient-to-r ${currentTheme.primary} text-white shadow-lg hover:scale-110 transition-transform duration-200`}
+              >
+                <Phone className="w-6 h-6" />
+              </Button>
+            ) : callStatus === "connected" ? (
+              <Button
+                onClick={endCall}
+                className="w-16 h-16 rounded-full bg-red-500 text-white shadow-lg hover:scale-110 transition-transform duration-200"
+              >
+                <PhoneOff className="w-6 h-6" />
+              </Button>
+            ) : (
+              <Button
+                onClick={endCall}
+                className="w-16 h-16 rounded-full bg-red-500 text-white shadow-lg hover:scale-110 transition-transform duration-200"
+              >
+                <PhoneOff className="w-6 h-6" />
+              </Button>
+            )}
+
+            {/* Next Match */}
+            {callStatus === "ended" && onNextMatch && (
+              <Button
+                onClick={onNextMatch}
+                className={`w-12 h-12 rounded-full bg-gradient-to-r ${currentTheme.accent} text-white hover:scale-110 transition-transform duration-200`}
+              >
+                <Shuffle className="w-5 h-5" />
+              </Button>
+            )}
+
+            {/* Chat Toggle */}
+            <Button
+              onClick={toggleChat}
+              variant="outline"
+              size="icon"
+              className={`w-12 h-12 rounded-full border-2 border-border/20 hover:scale-110 transition-transform duration-200 ${
+                showChat ? `bg-gradient-to-r ${currentTheme.accent} text-white` : ''
+              }`}
+            >
+              <MessageCircle className="w-5 h-5" />
+            </Button>
+
+            {/* Settings */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="w-12 h-12 rounded-full border-2 border-border/20 hover:scale-110 transition-transform duration-200"
+            >
+              <Settings className="w-5 h-5" />
+            </Button>
+          </div>
+
+          {/* Status Bar */}
+          <div className="flex items-center justify-center mt-4 space-x-4">
+            <div className="flex items-center space-x-2">
+              {getStatusIcon()}
+              <span className="text-sm text-foreground">{getStatusText()}</span>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <div className={`w-2 h-2 rounded-full ${callStatus === "connected" ? "bg-green-500" : "bg-yellow-500"} animate-pulse`}></div>
+              <span className="text-xs text-muted-foreground">
+                {callStatus === "connected" ? "Live" : "Connecting"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Floating Action Button for Chat */}
+        {!showChat && (
+          <Button
+            onClick={toggleChat}
+            className={`absolute bottom-20 right-4 w-12 h-12 rounded-full bg-gradient-to-r ${currentTheme.accent} text-white shadow-lg hover:scale-110 transition-transform duration-200`}
+          >
+            <MessageCircle className="w-5 h-5" />
+          </Button>
         )}
-      </div>
-
-      {/* Call status */}
-      <div className="absolute top-4 left-4">
-        <Badge variant="secondary" className="bg-black/50 text-white">
-          {callStatus === "connected" ? "Connected" : "Connecting..."}
-        </Badge>
-      </div>
-
-      {/* Remote user info */}
-      {!remoteStream && (
-        <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
-          <div className="text-center text-white">
-            <Avatar className="w-24 h-24 mx-auto mb-4">
-              <AvatarImage src={remoteUserAvatar || "/placeholder.svg"} />
-              <AvatarFallback className="text-xl">{remoteUserName?.[0] || "U"}</AvatarFallback>
-            </Avatar>
-            <h3 className="font-semibold text-lg">{remoteUserName}</h3>
-            <p className="text-sm text-gray-400">Connecting...</p>
-          </div>
-        </div>
-      )}
-
-      {/* Call controls */}
-      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2">
-        <div className="flex items-center space-x-4 bg-black/50 backdrop-blur-sm rounded-full px-6 py-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "rounded-full w-12 h-12",
-              isAudioEnabled ? "bg-white/20 hover:bg-white/30 text-white" : "bg-red-600 hover:bg-red-700 text-white",
-            )}
-            onClick={toggleAudio}
-          >
-            {isAudioEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "rounded-full w-12 h-12",
-              isVideoEnabled ? "bg-white/20 hover:bg-white/30 text-white" : "bg-red-600 hover:bg-red-700 text-white",
-            )}
-            onClick={toggleVideo}
-          >
-            {isVideoEnabled ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full w-12 h-12 bg-white/20 hover:bg-white/30 text-white"
-          >
-            <Monitor className="w-5 h-5" />
-          </Button>
-
-          <Button variant="destructive" size="icon" className="rounded-full w-12 h-12" onClick={handleEndCall}>
-            <PhoneOff className="w-5 h-5" />
-          </Button>
-        </div>
       </div>
     </div>
   )

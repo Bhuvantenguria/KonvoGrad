@@ -48,7 +48,11 @@ export class WebRTCManager {
     this.peerConnection.onicecandidate = async (event) => {
       if (event.candidate) {
         await this.sendSignal("ice-candidate", {
-          candidate: event.candidate.toJSON(),
+          candidate: {
+            candidate: event.candidate.candidate,
+            sdpMLineIndex: event.candidate.sdpMLineIndex,
+            sdpMid: event.candidate.sdpMid,
+          },
         })
       }
     }
@@ -59,10 +63,39 @@ export class WebRTCManager {
 
   async startLocalStream(video = true, audio = true) {
     try {
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: video ? { width: 1280, height: 720 } : false,
-        audio,
-      })
+      // First, try to stop any existing streams to free up devices
+      if (this.localStream) {
+        this.localStream.getTracks().forEach((track) => track.stop())
+        this.localStream = null
+      }
+
+      // Try to get user media with fallback options
+      let constraints = {
+        video: video ? { 
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          facingMode: "user"
+        } : false,
+        audio: audio ? {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } : false,
+      }
+
+      try {
+        this.localStream = await navigator.mediaDevices.getUserMedia(constraints)
+      } catch (error) {
+        console.warn("Failed with ideal constraints, trying fallback:", error)
+        
+        // Fallback to basic constraints
+        const fallbackConstraints = {
+          video: video ? true : false,
+          audio: audio ? true : false,
+        }
+        
+        this.localStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints)
+      }
 
       // Add local stream to peer connection
       if (this.peerConnection) {
@@ -74,7 +107,23 @@ export class WebRTCManager {
       return this.localStream
     } catch (error) {
       console.error("Error accessing media devices:", error)
-      throw error
+      
+      // Provide more helpful error messages
+      if (error instanceof Error) {
+        if (error.name === "NotAllowedError") {
+          throw new Error("Camera/microphone access denied. Please allow permissions and try again.")
+        } else if (error.name === "NotFoundError") {
+          throw new Error("No camera or microphone found. Please check your device.")
+        } else if (error.name === "NotReadableError") {
+          throw new Error("Camera/microphone is in use by another application. Please close other apps using camera/mic and try again.")
+        } else if (error.name === "OverconstrainedError") {
+          throw new Error("Camera/microphone doesn't meet requirements. Please check your device settings.")
+        } else if (error.name === "TypeError") {
+          throw new Error("Invalid media constraints. Please check your browser settings.")
+        }
+      }
+      
+      throw new Error("Failed to access camera/microphone. Please check permissions and try again.")
     }
   }
 
@@ -85,7 +134,10 @@ export class WebRTCManager {
     await this.peerConnection.setLocalDescription(offer)
 
     await this.sendSignal("offer", {
-      offer: offer.toJSON(),
+      offer: {
+        type: offer.type,
+        sdp: offer.sdp,
+      },
     })
   }
 
@@ -97,7 +149,10 @@ export class WebRTCManager {
     await this.peerConnection.setLocalDescription(answer)
 
     await this.sendSignal("answer", {
-      answer: answer.toJSON(),
+      answer: {
+        type: answer.type,
+        sdp: answer.sdp,
+      },
     })
   }
 
@@ -209,19 +264,23 @@ export class WebRTCManager {
   }
 
   cleanup() {
+    // Stop all local tracks
     if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => track.stop())
-      this.localStream = null
+      this.localStream.getTracks().forEach(track => {
+        track.stop();
+      });
+      this.localStream = null;
     }
 
+    // Close peer connection
     if (this.peerConnection) {
-      this.peerConnection.close()
-      this.peerConnection = null
+      this.peerConnection.close();
+      this.peerConnection = null;
     }
 
-    if (this.signalUnsubscribe) {
-      this.signalUnsubscribe()
-    }
+    // Clear callbacks
+    this.onRemoteStreamCallback = undefined;
+    this.onCallEndCallback = undefined;
   }
 
   onRemoteStream(callback: (stream: MediaStream) => void) {
@@ -238,5 +297,39 @@ export class WebRTCManager {
 
   getRemoteStream() {
     return this.remoteStream
+  }
+
+  // Check if devices are available
+  async checkDeviceAvailability() {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const videoDevices = devices.filter(device => device.kind === 'videoinput')
+      const audioDevices = devices.filter(device => device.kind === 'audioinput')
+      
+      return {
+        hasVideo: videoDevices.length > 0,
+        hasAudio: audioDevices.length > 0,
+        videoDevices: videoDevices.length,
+        audioDevices: audioDevices.length
+      }
+    } catch (error) {
+      console.error("Error checking device availability:", error)
+      return {
+        hasVideo: false,
+        hasAudio: false,
+        videoDevices: 0,
+        audioDevices: 0
+      }
+    }
+  }
+
+  // Force stop all tracks (emergency cleanup)
+  forceStopAllTracks() {
+    if (this.localStream) {
+      this.localStream.getTracks().forEach(track => {
+        track.stop();
+      });
+      this.localStream = null;
+    }
   }
 }

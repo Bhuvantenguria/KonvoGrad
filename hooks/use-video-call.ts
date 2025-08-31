@@ -3,6 +3,13 @@
 import { useEffect, useState, useRef, useCallback } from "react"
 import { WebRTCManager } from "@/lib/webrtc-utils"
 
+interface Message {
+  id: string
+  text: string
+  senderId: string
+  timestamp: Date
+}
+
 export function useVideoCall(chatRoomId: string, userId: string, remoteUserId: string) {
   const [isCallActive, setIsCallActive] = useState(false)
   const [isIncomingCall, setIsIncomingCall] = useState(false)
@@ -12,6 +19,11 @@ export function useVideoCall(chatRoomId: string, userId: string, remoteUserId: s
   const [isVideoEnabled, setIsVideoEnabled] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "ringing" | "connected" | "ended">("idle")
+  
+  // Chat-related state
+  const [messages, setMessages] = useState<Message[]>([])
+  const [messageText, setMessageText] = useState("")
+  const [showChat, setShowChat] = useState(false)
 
   const webrtcManagerRef = useRef<WebRTCManager | null>(null)
 
@@ -44,6 +56,12 @@ export function useVideoCall(chatRoomId: string, userId: string, remoteUserId: s
       setError(null)
       setCallStatus("calling")
 
+      // Check device availability first
+      const deviceStatus = await webrtcManagerRef.current.checkDeviceAvailability()
+      if (!deviceStatus.hasVideo && !deviceStatus.hasAudio) {
+        throw new Error("No camera or microphone found. Please check your device.")
+      }
+
       const stream = await webrtcManagerRef.current.startLocalStream(true, true)
       setLocalStream(stream)
 
@@ -53,7 +71,11 @@ export function useVideoCall(chatRoomId: string, userId: string, remoteUserId: s
       setIsCallActive(true)
     } catch (err) {
       console.error("Error starting call:", err)
-      setError("Failed to start call. Please check your camera and microphone permissions.")
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError("Failed to start call. Please check your camera and microphone permissions.")
+      }
       setCallStatus("idle")
     }
   }, [])
@@ -65,6 +87,12 @@ export function useVideoCall(chatRoomId: string, userId: string, remoteUserId: s
       setError(null)
       setCallStatus("connected")
 
+      // Check device availability first
+      const deviceStatus = await webrtcManagerRef.current.checkDeviceAvailability()
+      if (!deviceStatus.hasVideo && !deviceStatus.hasAudio) {
+        throw new Error("No camera or microphone found. Please check your device.")
+      }
+
       const stream = await webrtcManagerRef.current.startLocalStream(true, true)
       setLocalStream(stream)
 
@@ -74,7 +102,11 @@ export function useVideoCall(chatRoomId: string, userId: string, remoteUserId: s
       setIsIncomingCall(false)
     } catch (err) {
       console.error("Error accepting call:", err)
-      setError("Failed to accept call. Please check your camera and microphone permissions.")
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError("Failed to accept call. Please check your camera and microphone permissions.")
+      }
       setCallStatus("idle")
     }
   }, [])
@@ -120,6 +152,25 @@ export function useVideoCall(chatRoomId: string, userId: string, remoteUserId: s
     return false
   }, [])
 
+  // Chat-related functions
+  const sendMessage = useCallback(() => {
+    if (!messageText.trim()) return
+
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      text: messageText.trim(),
+      senderId: userId,
+      timestamp: new Date()
+    }
+
+    setMessages(prev => [...prev, newMessage])
+    setMessageText("")
+  }, [messageText, userId])
+
+  const toggleChat = useCallback(() => {
+    setShowChat(prev => !prev)
+  }, [])
+
   return {
     isCallActive,
     isIncomingCall,
@@ -135,5 +186,12 @@ export function useVideoCall(chatRoomId: string, userId: string, remoteUserId: s
     endCall,
     toggleAudio,
     toggleVideo,
+    // Chat-related properties
+    messages,
+    sendMessage,
+    messageText,
+    setMessageText,
+    showChat,
+    toggleChat,
   }
 }

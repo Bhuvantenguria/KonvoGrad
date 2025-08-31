@@ -1,58 +1,93 @@
-import type React from "react"
 import type { Metadata } from "next"
-import { Space_Grotesk, DM_Sans } from "next/font/google"
 import { ClerkProvider } from "@clerk/nextjs"
+import { ThemeProvider } from "@/components/theme-provider"
 import "./globals.css"
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-space-grotesk",
-  weight: ["400", "600", "700"],
-})
-
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-dm-sans",
-  weight: ["400", "500"],
-})
 
 export const metadata: Metadata = {
   title: "KonvoGrad - Professional Networking Platform",
-  description: "Connect with alumni and developers through random matching and professional networking",
-  generator: "v0.app",
+  description: "Connect with alumni and developers through secure video and text conversations",
+  keywords: ["networking", "professional", "alumni", "developers", "video chat", "matching"],
+  authors: [{ name: "KonvoGrad Team" }],
+  creator: "KonvoGrad",
+  publisher: "KonvoGrad",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  metadataBase: new URL("https://konvo-grad.vercel.app/"),
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "KonvoGrad - Professional Networking Platform",
+    description: "Connect with alumni and developers through secure video and text conversations",
+    url: "https://konvograd.com",
+    siteName: "KonvoGrad",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "KonvoGrad - Professional Networking Platform",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "KonvoGrad - Professional Networking Platform",
+    description: "Connect with alumni and developers through secure video and text conversations",
+    images: ["/og-image.jpg"],
+    creator: "@konvograd",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  verification: {
+    google: "your-google-verification-code",
+    yandex: "your-yandex-verification-code",
+    yahoo: "your-yahoo-verification-code",
+  },
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
-    <ClerkProvider
-      appearance={{
-        baseTheme: undefined,
-        variables: {
-          colorPrimary: "oklch(0.45 0.15 142)",
-          colorBackground: "oklch(0.98 0.01 142)",
-          colorInputBackground: "oklch(1 0 0)",
-          colorInputText: "oklch(0.25 0.01 142)",
-          colorText: "oklch(0.25 0.01 142)",
-          colorTextSecondary: "oklch(0.45 0.01 142)",
-          colorSuccess: "oklch(0.45 0.15 142)",
-          colorDanger: "oklch(0.577 0.245 27.325)",
-          colorWarning: "oklch(0.65 0.18 142)",
-          fontFamily: "var(--font-dm-sans)",
-          fontFamilyButtons: "var(--font-space-grotesk)",
-          fontSize: "16px",
-          borderRadius: "0.5rem",
-        },
-      }}
-    >
-      <html lang="en" className={`${spaceGrotesk.variable} ${dmSans.variable} antialiased`}>
-        <body className="font-sans">{children}</body>
-      </html>
-    </ClerkProvider>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Space+Grotesk:wght@300..700&display=swap"
+          rel="stylesheet"
+        />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#6366f1" />
+        <meta name="color-scheme" content="light dark" />
+      </head>
+      <body className="antialiased">
+        <ClerkProvider>
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   )
 }

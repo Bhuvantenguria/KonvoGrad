@@ -1,5 +1,4 @@
-import { getToken, onMessage, type MessagePayload } from "firebase/messaging"
-import { messaging } from "./firebase"
+import { getFCMToken, onForegroundMessage } from "./firebase-messaging"
 import { addDoc, collection, updateDoc, doc, query, where, getDocs } from "firebase/firestore"
 import { db } from "./firebase"
 
@@ -22,10 +21,8 @@ export interface NotificationData {
 export interface NotificationSettings {
   userId: string
   enablePush: boolean
-  enableMessages: boolean
-  enableMatches: boolean
-  enableConnections: boolean
-  enableSystem: boolean
+  enableEmail: boolean
+  enableInApp: boolean
   quietHours: {
     enabled: boolean
     start: string // "22:00"
@@ -34,121 +31,81 @@ export interface NotificationSettings {
 }
 
 // Request notification permission and get FCM token
-export const requestNotificationPermission = async (userId: string): Promise<string | null> => {
+export async function requestNotificationPermission(userId: string): Promise<string | null> {
   try {
-    if (!messaging) {
-      console.log("Messaging not supported")
-      return null
+    // Check if notifications are supported
+    if (!("Notification" in window)) {
+      return null;
     }
 
     // Request permission
-    const permission = await Notification.requestPermission()
+    const permission = await Notification.requestPermission();
     if (permission !== "granted") {
-      console.log("Notification permission denied")
-      return null
+      return null;
     }
 
     // Get FCM token
-    const token = await getToken(messaging, {
-      vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-    })
-
+    const token = await getFCMToken();
     if (token) {
-      // Save token to user document
-      await saveNotificationToken(userId, token)
-      console.log("FCM token obtained:", token)
-      return token
+      // Save token to user's document
+      await saveNotificationToken(userId, token);
+      return token;
     }
-
-    return null
+    return null;
   } catch (error) {
-    console.error("Error getting notification permission:", error)
-    return null
+    console.error("Error getting notification permission:", error);
+    return null;
   }
 }
 
 // Save FCM token to user document
-export const saveNotificationToken = async (userId: string, token: string) => {
+export const saveNotificationToken = async (userId: string, token: string): Promise<void> => {
   try {
-    await updateDoc(doc(db, "users", userId), {
-      fcmToken: token,
-      updatedAt: new Date(),
-    })
+    // Check if user already has a token document
+    const tokenQuery = query(
+      collection(db, "notificationTokens"),
+      where("userId", "==", userId)
+    )
+    const tokenDocs = await getDocs(tokenQuery)
+
+    if (tokenDocs.empty) {
+      // Create new token document
+      await addDoc(collection(db, "notificationTokens"), {
+        userId,
+        token,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+    } else {
+      // Update existing token document
+      const tokenDoc = tokenDocs.docs[0]
+      await updateDoc(doc(db, "notificationTokens", tokenDoc.id), {
+        token,
+        updatedAt: new Date(),
+      })
+    }
   } catch (error) {
-    console.error("Error saving FCM token:", error)
-  }
-}
-
-// Listen for foreground messages
-export const onForegroundMessage = (callback: (payload: MessagePayload) => void) => {
-  if (!messaging) return () => {}
-
-  return onMessage(messaging, (payload) => {
-    console.log("Foreground message received:", payload)
-    callback(payload)
-  })
-}
-
-// Create notification in database
-export const createNotification = async (
-  userId: string,
-  title: string,
-  body: string,
-  type: NotificationData["type"],
-  data?: NotificationData["data"],
-): Promise<string> => {
-  try {
-    const docRef = await addDoc(collection(db, "notifications"), {
-      userId,
-      title,
-      body,
-      type,
-      data: data || {},
-      isRead: false,
-      createdAt: new Date(),
-    })
-    return docRef.id
-  } catch (error) {
-    console.error("Error creating notification:", error)
+    console.error("Error saving notification token:", error)
     throw error
   }
 }
 
-// Send push notification (server-side function would be needed for actual sending)
-export const sendPushNotification = async (
-  userId: string,
-  title: string,
-  body: string,
-  type: NotificationData["type"],
-  data?: NotificationData["data"],
-) => {
-  try {
-    // Create notification in database
-    await createNotification(userId, title, body, type, data)
-
-    // In a real implementation, you would call your server endpoint here
-    // to send the actual push notification using Firebase Admin SDK
-    console.log("Push notification queued for user:", userId)
-  } catch (error) {
-    console.error("Error sending push notification:", error)
-  }
-}
-
-// Get user notification settings
+// Get notification settings
 export const getNotificationSettings = async (userId: string): Promise<NotificationSettings | null> => {
   try {
-    const q = query(collection(db, "notificationSettings"), where("userId", "==", userId))
-    const querySnapshot = await getDocs(q)
+    const settingsQuery = query(
+      collection(db, "notificationSettings"),
+      where("userId", "==", userId)
+    )
+    const settingsDocs = await getDocs(settingsQuery)
 
-    if (querySnapshot.empty) {
+    if (settingsDocs.empty) {
       // Create default settings
-      const defaultSettings: Omit<NotificationSettings, "id"> = {
+      const defaultSettings: NotificationSettings = {
         userId,
         enablePush: true,
-        enableMessages: true,
-        enableMatches: true,
-        enableConnections: true,
-        enableSystem: true,
+        enableEmail: false,
+        enableInApp: true,
         quietHours: {
           enabled: false,
           start: "22:00",
@@ -157,11 +114,11 @@ export const getNotificationSettings = async (userId: string): Promise<Notificat
       }
 
       const docRef = await addDoc(collection(db, "notificationSettings"), defaultSettings)
-      return { id: docRef.id, ...defaultSettings } as NotificationSettings
+      return { ...defaultSettings, id: docRef.id }
     }
 
-    const doc = querySnapshot.docs[0]
-    return { id: doc.id, ...doc.data() } as NotificationSettings
+    const settingsDoc = settingsDocs.docs[0]
+    return { id: settingsDoc.id, ...settingsDoc.data() } as NotificationSettings
   } catch (error) {
     console.error("Error getting notification settings:", error)
     return null
@@ -171,45 +128,126 @@ export const getNotificationSettings = async (userId: string): Promise<Notificat
 // Update notification settings
 export const updateNotificationSettings = async (
   userId: string,
-  settings: Partial<Omit<NotificationSettings, "userId">>,
-) => {
+  updates: Partial<Omit<NotificationSettings, "userId">>
+): Promise<void> => {
   try {
-    const q = query(collection(db, "notificationSettings"), where("userId", "==", userId))
-    const querySnapshot = await getDocs(q)
+    const settingsQuery = query(
+      collection(db, "notificationSettings"),
+      where("userId", "==", userId)
+    )
+    const settingsDocs = await getDocs(settingsQuery)
 
-    if (!querySnapshot.empty) {
-      const docRef = querySnapshot.docs[0].ref
-      await updateDoc(docRef, settings)
+    if (settingsDocs.empty) {
+      throw new Error("Notification settings not found")
     }
+
+    const settingsDoc = settingsDocs.docs[0]
+    await updateDoc(doc(db, "notificationSettings", settingsDoc.id), {
+      ...updates,
+      updatedAt: new Date(),
+    })
   } catch (error) {
     console.error("Error updating notification settings:", error)
+    throw error
   }
 }
 
 // Mark notification as read
-export const markNotificationAsRead = async (notificationId: string) => {
+export const markNotificationAsRead = async (notificationId: string): Promise<void> => {
   try {
     await updateDoc(doc(db, "notifications", notificationId), {
       isRead: true,
+      readAt: new Date(),
     })
   } catch (error) {
     console.error("Error marking notification as read:", error)
+    throw error
   }
 }
 
-// Notification helpers for different events
-export const notifyNewMessage = async (recipientId: string, senderName: string, chatRoomId: string) => {
-  await sendPushNotification(recipientId, "New Message", `${senderName} sent you a message`, "message", { chatRoomId })
+// Create notification
+export const createNotification = async (
+  userId: string,
+  title: string,
+  body: string,
+  type: NotificationData["type"],
+  data?: NotificationData["data"]
+): Promise<string> => {
+  try {
+    const notificationData: Omit<NotificationData, "id"> = {
+      userId,
+      title,
+      body,
+      type,
+      data,
+      isRead: false,
+      createdAt: new Date(),
+    }
+
+    const docRef = await addDoc(collection(db, "notifications"), notificationData)
+    return docRef.id
+  } catch (error) {
+    console.error("Error creating notification:", error)
+    throw error
+  }
 }
 
-export const notifyNewMatch = async (userId: string, matchName: string, chatRoomId: string) => {
-  await sendPushNotification(userId, "New Match!", `You've been matched with ${matchName}`, "match", { chatRoomId })
+// Notify new message
+export const notifyNewMessage = async (
+  userId: string,
+  senderName: string,
+  chatRoomId: string
+): Promise<void> => {
+  try {
+    await createNotification(
+      userId,
+      "New Message",
+      `${senderName} sent you a message`,
+      "message",
+      { chatRoomId, senderId: userId }
+    )
+  } catch (error) {
+    console.error("Error notifying new message:", error)
+  }
 }
 
-export const notifyConnectionRequest = async (userId: string, requesterName: string) => {
-  await sendPushNotification(userId, "Connection Request", `${requesterName} wants to connect with you`, "connection")
+// Notify new match
+export const notifyNewMatch = async (
+  userId: string,
+  matchedUserName: string,
+  matchId: string
+): Promise<void> => {
+  try {
+    await createNotification(
+      userId,
+      "New Match!",
+      `You matched with ${matchedUserName}!`,
+      "match",
+      { matchId }
+    )
+  } catch (error) {
+    console.error("Error notifying new match:", error)
+  }
 }
 
-export const notifySystemMessage = async (userId: string, title: string, body: string) => {
-  await sendPushNotification(userId, title, body, "system")
+// Notify new connection
+export const notifyNewConnection = async (
+  userId: string,
+  connectionUserName: string
+): Promise<void> => {
+  try {
+    await createNotification(
+      userId,
+      "New Connection",
+      `${connectionUserName} wants to connect with you`,
+      "connection"
+    )
+  } catch (error) {
+    console.error("Error notifying new connection:", error)
+  }
+}
+
+// Get foreground message handler
+export const getForegroundMessageHandler = () => {
+  return onForegroundMessage
 }

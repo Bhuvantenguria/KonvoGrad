@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react"
 import {
-  createChatRoom,
-  getChatMessages,
-  sendMessage,
-  markMessagesAsRead,
-  getUserChatRooms,
+  createChatRoomClient,
+  getChatMessagesClient,
+  sendMessageClient,
+  markMessagesAsReadClient,
+  getUserChatRoomsClient,
   type ChatRoom,
   type Message,
-} from "@/lib/firebase-utils"
+} from "@/lib/firebase-client-utils"
 
 export function useChat(userId: string) {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([])
@@ -21,7 +21,7 @@ export function useChat(userId: string) {
   useEffect(() => {
     if (!userId) return
 
-    const unsubscribe = getUserChatRooms(userId, (rooms) => {
+    const unsubscribe = getUserChatRoomsClient(userId, (rooms) => {
       setChatRooms(rooms)
       setLoading(false)
     })
@@ -36,10 +36,10 @@ export function useChat(userId: string) {
       return
     }
 
-    const unsubscribe = getChatMessages(currentChatRoom.id, (msgs) => {
+    const unsubscribe = getChatMessagesClient(currentChatRoom.id, (msgs) => {
       setMessages(msgs)
       // Mark messages as read
-      markMessagesAsRead(currentChatRoom.id, userId)
+      markMessagesAsReadClient(currentChatRoom.id, userId)
     })
 
     return unsubscribe
@@ -48,7 +48,7 @@ export function useChat(userId: string) {
   const createNewChatRoom = useCallback(
     async (type: ChatRoom["type"], participants: string[], participantDetails: ChatRoom["participantDetails"]) => {
       try {
-        const chatRoomId = await createChatRoom(type, participants, participantDetails)
+        const chatRoomId = await createChatRoomClient(type, participants, participantDetails)
         return chatRoomId
       } catch (error) {
         console.error("Error creating chat room:", error)
@@ -61,7 +61,7 @@ export function useChat(userId: string) {
   const sendChatMessage = useCallback(
     async (chatRoomId: string, senderId: string, senderName: string, text: string, type: Message["type"] = "text") => {
       try {
-        await sendMessage(chatRoomId, senderId, senderName, text, type)
+        await sendMessageClient(chatRoomId, senderId, senderName, text, type)
       } catch (error) {
         console.error("Error sending message:", error)
         throw error

@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react"
 import { useUser } from "@clerk/nextjs"
 import {
-  createUser,
-  getUserByClerkId,
-  updateUser,
-  updateUserOnlineStatus,
+  createUserClient,
+  getUserByClerkIdClient,
+  updateUserClient,
+  updateUserOnlineStatusClient,
   generateSessionId,
   generateInviteCode,
   type User,
-} from "@/lib/firebase-utils"
+} from "@/lib/firebase-client-utils"
 
 export function useFirebaseUser() {
   const { user: clerkUser, isLoaded } = useUser()
@@ -30,7 +30,7 @@ export function useFirebaseUser() {
         setError(null)
 
         // Check if user exists in Firebase
-        let user = await getUserByClerkId(clerkUser.id)
+        let user = await getUserByClerkIdClient(clerkUser.id)
 
         if (!user) {
           // Create new user in Firebase
@@ -41,25 +41,25 @@ export function useFirebaseUser() {
             lastName: clerkUser.lastName || "",
             imageUrl: clerkUser.imageUrl,
             role: (clerkUser.publicMetadata?.role as User["role"]) || "professional",
-            company: clerkUser.publicMetadata?.company as string,
-            position: clerkUser.publicMetadata?.position as string,
-            college: clerkUser.publicMetadata?.college as string,
-            graduationYear: clerkUser.publicMetadata?.graduationYear as string,
+            company: clerkUser.publicMetadata?.company as string || "",
+            position: clerkUser.publicMetadata?.position as string || "",
+            college: clerkUser.publicMetadata?.college as string || "",
+            graduationYear: clerkUser.publicMetadata?.graduationYear as string || "",
             skills: (clerkUser.publicMetadata?.skills as string[]) || [],
-            bio: clerkUser.publicMetadata?.bio as string,
-            linkedinUrl: clerkUser.publicMetadata?.linkedinUrl as string,
+            bio: clerkUser.publicMetadata?.bio as string || "",
+            linkedinUrl: clerkUser.publicMetadata?.linkedinUrl as string || "",
             isVerified: false,
             isOnline: true,
-            lastSeen: new Date() as any,
+            lastSeen: new Date(),
             sessionId: generateSessionId(),
             inviteCode: generateInviteCode(),
           }
 
-          const userId = await createUser(userData)
+          const userId = await createUserClient(userData)
           user = { id: userId, ...userData } as User
         } else {
           // Update existing user's online status and sync with Clerk data
-          await updateUser(user.id, {
+          await updateUserClient(user.id, {
             firstName: clerkUser.firstName || user.firstName,
             lastName: clerkUser.lastName || user.lastName,
             imageUrl: clerkUser.imageUrl || user.imageUrl,
@@ -90,7 +90,7 @@ export function useFirebaseUser() {
     // Set up cleanup for when user goes offline
     const handleBeforeUnload = () => {
       if (firebaseUser) {
-        updateUserOnlineStatus(firebaseUser.id, false)
+        updateUserOnlineStatusClient(firebaseUser.id, false)
       }
     }
 
@@ -99,7 +99,7 @@ export function useFirebaseUser() {
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload)
       if (firebaseUser) {
-        updateUserOnlineStatus(firebaseUser.id, false)
+        updateUserOnlineStatusClient(firebaseUser.id, false)
       }
     }
   }, [clerkUser, isLoaded])
@@ -108,7 +108,7 @@ export function useFirebaseUser() {
     if (!firebaseUser) return
 
     try {
-      await updateUser(firebaseUser.id, updates)
+      await updateUserClient(firebaseUser.id, updates)
       setFirebaseUser((prev) => (prev ? { ...prev, ...updates } : null))
     } catch (err) {
       console.error("Error updating Firebase user:", err)

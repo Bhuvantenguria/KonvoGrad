@@ -5,7 +5,7 @@ import { collection, query, where, orderBy, onSnapshot, limit } from "firebase/f
 import { db } from "@/lib/firebase"
 import {
   requestNotificationPermission,
-  onForegroundMessage,
+  getForegroundMessageHandler,
   markNotificationAsRead,
   getNotificationSettings,
   updateNotificationSettings,
@@ -71,6 +71,7 @@ export const useNotifications = (userId: string) => {
 
   // Listen for foreground messages
   useEffect(() => {
+    const onForegroundMessage = getForegroundMessageHandler()
     const unsubscribe = onForegroundMessage((payload) => {
       // Show toast notification for foreground messages
       toast({

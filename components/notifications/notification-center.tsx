@@ -122,38 +122,34 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="message-notifications">New Messages</Label>
+                  <Label htmlFor="email-notifications">Email Notifications</Label>
                   <Switch
-                    id="message-notifications"
-                    checked={settings?.enableMessages || false}
-                    onCheckedChange={(checked) => updateSettings({ enableMessages: checked })}
+                    id="email-notifications"
+                    checked={settings?.enableEmail || false}
+                    onCheckedChange={(checked) => updateSettings({ enableEmail: checked })}
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="match-notifications">New Matches</Label>
+                  <Label htmlFor="in-app-notifications">In-App Notifications</Label>
                   <Switch
-                    id="match-notifications"
-                    checked={settings?.enableMatches || false}
-                    onCheckedChange={(checked) => updateSettings({ enableMatches: checked })}
+                    id="in-app-notifications"
+                    checked={settings?.enableInApp || false}
+                    onCheckedChange={(checked) => updateSettings({ enableInApp: checked })}
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="connection-notifications">Connections</Label>
+                  <Label htmlFor="quiet-hours">Quiet Hours</Label>
                   <Switch
-                    id="connection-notifications"
-                    checked={settings?.enableConnections || false}
-                    onCheckedChange={(checked) => updateSettings({ enableConnections: checked })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="system-notifications">System Updates</Label>
-                  <Switch
-                    id="system-notifications"
-                    checked={settings?.enableSystem || false}
-                    onCheckedChange={(checked) => updateSettings({ enableSystem: checked })}
+                    id="quiet-hours"
+                    checked={settings?.quietHours?.enabled || false}
+                    onCheckedChange={(checked) => updateSettings({ 
+                      quietHours: { 
+                        ...settings?.quietHours, 
+                        enabled: checked 
+                      } 
+                    })}
                   />
                 </div>
               </div>

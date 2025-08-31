@@ -12,8 +12,11 @@ import {
   onSnapshot,
   serverTimestamp,
   type Timestamp,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore"
 import { db } from "./firebase"
+import { uploadImage, uploadFile } from "./cloudinary"
+// Server-side authentication removed to fix client component import issues
 
 // Types
 export interface User {
@@ -47,16 +50,9 @@ export interface User {
 
 export interface ChatRoom {
   id: string
-  type: "random" | "friend" | "video"
+  type: "direct" | "group"
   participants: string[]
-  participantDetails: {
-    [userId: string]: {
-      name: string
-      imageUrl?: string
-      role: string
-    }
-  }
-  isActive: boolean
+  participantDetails: Record<string, { name: string; imageUrl?: string; isOnline: boolean; role?: string }>
   lastMessage?: {
     text: string
     senderId: string
@@ -64,6 +60,11 @@ export interface ChatRoom {
   }
   createdAt: Timestamp
   updatedAt: Timestamp
+  isActive: boolean
+  metadata?: {
+    topic?: string
+    description?: string
+  }
 }
 
 export interface Message {
@@ -72,84 +73,37 @@ export interface Message {
   senderId: string
   senderName: string
   text: string
-  type: "text" | "image" | "file" | "system"
+  type: "text" | "image" | "file" | "audio" | "video"
+  mediaUrl?: string
+  fileName?: string
+  fileSize?: number
   timestamp: Timestamp
   isRead: boolean
-  reactions?: {
-    [userId: string]: string
-  }
+  readBy: string[]
 }
 
 export interface Connection {
   id: string
   userId1: string
   userId2: string
-  status: "pending" | "accepted" | "blocked"
-  initiatedBy: string
+  status: "pending" | "accepted" | "rejected"
+  createdAt: Timestamp
+  updatedAt: Timestamp
+  message?: string
+}
+
+export interface Match {
+  id: string
+  userId1: string
+  userId2: string
+  score: number
+  status: "pending" | "accepted" | "rejected"
   createdAt: Timestamp
   updatedAt: Timestamp
 }
 
-// Matching system types
-export interface MatchingQueue {
-  id: string
-  userId: string
-  userDetails: {
-    name: string
-    role: string
-    imageUrl?: string
-    skills: string[]
-    company?: string
-  }
-  preferences: {
-    roles: string[]
-    skipPreviousMatches: boolean
-  }
-  status: "waiting" | "matched" | "cancelled"
-  createdAt: Timestamp
-  matchedWith?: string
-  chatRoomId?: string
-}
-
-export interface MatchHistory {
-  id: string
-  userId1: string
-  userId2: string
-  chatRoomId: string
-  duration: number // in seconds
-  rating?: number
-  createdAt: Timestamp
-  endedAt?: Timestamp
-}
-
-// Admin-specific types
-export interface AdminStats {
-  totalUsers: number
-  activeUsers: number
-  totalChatRooms: number
-  activeChatRooms: number
-  totalMessages: number
-  totalMatches: number
-  reportedUsers: number
-  blockedUsers: number
-}
-
-export interface UserReport {
-  id: string
-  reportedUserId: string
-  reportedBy: string
-  reason: string
-  description: string
-  status: "pending" | "reviewed" | "resolved" | "dismissed"
-  chatRoomId?: string
-  messageId?: string
-  createdAt: Timestamp
-  reviewedAt?: Timestamp
-  reviewedBy?: string
-}
-
 // User operations
-export const createUser = async (userData: Omit<User, "id" | "createdAt" | "updatedAt">) => {
+export const createUser = async (userData: Omit<User, "id" | "createdAt" | "updatedAt">): Promise<string> => {
   try {
     const docRef = await addDoc(collection(db, "users"), {
       ...userData,
@@ -168,21 +122,35 @@ export const getUserByClerkId = async (clerkId: string): Promise<User | null> =>
     const q = query(collection(db, "users"), where("clerkId", "==", clerkId))
     const querySnapshot = await getDocs(q)
 
-    if (querySnapshot.empty) {
-      return null
-    }
+    if (querySnapshot.empty) return null
 
     const doc = querySnapshot.docs[0]
     return { id: doc.id, ...doc.data() } as User
   } catch (error) {
-    console.error("Error getting user by Clerk ID:", error)
+    console.error("Error getting user by clerk ID:", error)
     throw error
   }
 }
 
-export const updateUser = async (userId: string, updates: Partial<User>) => {
+export const getUser = async (userId: string): Promise<User | null> => {
   try {
-    await updateDoc(doc(db, "users", userId), {
+    const docRef = doc(db, "users", userId)
+    const docSnap = await getDoc(docRef)
+    
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as User
+    }
+    return null
+  } catch (error) {
+    console.error("Error getting user:", error)
+    throw error
+  }
+}
+
+export const updateUser = async (userId: string, updates: Partial<User>): Promise<void> => {
+  try {
+    const docRef = doc(db, "users", userId)
+    await updateDoc(docRef, {
       ...updates,
       updatedAt: serverTimestamp(),
     })
@@ -192,15 +160,155 @@ export const updateUser = async (userId: string, updates: Partial<User>) => {
   }
 }
 
-export const updateUserOnlineStatus = async (userId: string, isOnline: boolean) => {
+export const updateUserOnlineStatus = async (userId: string, isOnline: boolean): Promise<void> => {
   try {
-    await updateDoc(doc(db, "users", userId), {
+    await updateUser(userId, {
       isOnline,
-      lastSeen: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      lastSeen: serverTimestamp() as any,
     })
   } catch (error) {
     console.error("Error updating user online status:", error)
+    throw error
+  }
+}
+
+export const generateSessionId = (): string => {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+}
+
+export const generateInviteCode = (): string => {
+  return Math.random().toString(36).substring(2, 8).toUpperCase()
+}
+
+// Admin functions
+export const suspendUser = async (userId: string, reason: string, suspendedBy: string): Promise<void> => {
+  try {
+    await updateUser(userId, {
+      suspensionReason: reason,
+      suspendedBy,
+      suspendedAt: serverTimestamp() as any,
+    })
+  } catch (error) {
+    console.error("Error suspending user:", error)
+    throw error
+  }
+}
+
+export const unsuspendUser = async (userId: string, unsuspendedBy: string): Promise<void> => {
+  try {
+    await updateUser(userId, {
+      suspensionReason: undefined,
+      suspendedBy: undefined,
+      suspendedAt: undefined,
+      unsuspendedBy,
+      unsuspendedAt: serverTimestamp() as any,
+    })
+  } catch (error) {
+    console.error("Error unsuspending user:", error)
+    throw error
+  }
+}
+
+export const updateReportStatus = async (reportId: string, status: string): Promise<void> => {
+  try {
+    const docRef = doc(db, "reports", reportId)
+    await updateDoc(docRef, {
+      status,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (error) {
+    console.error("Error updating report status:", error)
+    throw error
+  }
+}
+
+// Matching functions
+export const joinMatchingQueue = async (userId: string, userPreferences: any): Promise<void> => {
+  try {
+    const docRef = doc(db, "matchingQueue", userId)
+    await updateDoc(docRef, {
+      userId,
+      preferences: userPreferences,
+      joinedAt: serverTimestamp(),
+      isActive: true,
+    }, { upsert: true })
+  } catch (error) {
+    console.error("Error joining matching queue:", error)
+    throw error
+  }
+}
+
+export const leaveMatchingQueue = async (userId: string): Promise<void> => {
+  try {
+    const docRef = doc(db, "matchingQueue", userId)
+    await updateDoc(docRef, {
+      isActive: false,
+      leftAt: serverTimestamp(),
+    })
+  } catch (error) {
+    console.error("Error leaving matching queue:", error)
+    throw error
+  }
+}
+
+export const findRandomMatch = async (userId: string, preferences: any): Promise<string | null> => {
+  try {
+    const q = query(
+      collection(db, "matchingQueue"),
+      where("isActive", "==", true),
+      where("userId", "!=", userId)
+    )
+    const querySnapshot = await getDocs(q)
+    
+    if (querySnapshot.empty) return null
+    
+    // Simple random selection - can be improved with preference matching
+    const availableUsers = querySnapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter(user => user.isActive && user.userId !== userId)
+    
+    if (availableUsers.length === 0) return null
+    
+    const randomIndex = Math.floor(Math.random() * availableUsers.length)
+    return availableUsers[randomIndex].userId
+  } catch (error) {
+    console.error("Error finding random match:", error)
+    throw error
+  }
+}
+
+export const createMatchAndChatRoom = async (
+  userId1: string,
+  userId2: string,
+  user1Details: any,
+  user2Details: any
+): Promise<string> => {
+  try {
+    // Create chat room
+    const participantDetails = {
+      [userId1]: {
+        name: user1Details.name,
+        imageUrl: user1Details.imageUrl,
+        isOnline: true,
+        role: user1Details.role,
+      },
+      [userId2]: {
+        name: user2Details.name,
+        imageUrl: user2Details.imageUrl,
+        isOnline: true,
+        role: user2Details.role,
+      },
+    }
+    
+    const chatRoomId = await createChatRoom("direct", [userId1, userId2], participantDetails)
+    
+    // Remove both users from matching queue
+    await leaveMatchingQueue(userId1)
+    await leaveMatchingQueue(userId2)
+    
+    return chatRoomId
+  } catch (error) {
+    console.error("Error creating match and chat room:", error)
     throw error
   }
 }
@@ -209,16 +317,16 @@ export const updateUserOnlineStatus = async (userId: string, isOnline: boolean) 
 export const createChatRoom = async (
   type: ChatRoom["type"],
   participants: string[],
-  participantDetails: ChatRoom["participantDetails"],
+  participantDetails: ChatRoom["participantDetails"]
 ): Promise<string> => {
   try {
     const docRef = await addDoc(collection(db, "chatRooms"), {
       type,
       participants,
       participantDetails,
-      isActive: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      isActive: true,
     })
     return docRef.id
   } catch (error) {
@@ -247,7 +355,7 @@ export const getUserChatRooms = (userId: string, callback: (chatRooms: ChatRoom[
     collection(db, "chatRooms"),
     where("participants", "array-contains", userId),
     where("isActive", "==", true),
-    orderBy("updatedAt", "desc"),
+    orderBy("updatedAt", "desc")
   )
 
   return onSnapshot(q, (querySnapshot) => {
@@ -259,9 +367,10 @@ export const getUserChatRooms = (userId: string, callback: (chatRooms: ChatRoom[
   })
 }
 
-export const updateChatRoom = async (chatRoomId: string, updates: Partial<ChatRoom>) => {
+export const updateChatRoom = async (chatRoomId: string, updates: Partial<ChatRoom>): Promise<void> => {
   try {
-    await updateDoc(doc(db, "chatRooms", chatRoomId), {
+    const docRef = doc(db, "chatRooms", chatRoomId)
+    await updateDoc(docRef, {
       ...updates,
       updatedAt: serverTimestamp(),
     })
@@ -278,8 +387,24 @@ export const sendMessage = async (
   senderName: string,
   text: string,
   type: Message["type"] = "text",
+  file?: File
 ): Promise<string> => {
   try {
+    let mediaUrl: string | undefined
+    let fileName: string | undefined
+    let fileSize: number | undefined
+
+    // Handle file uploads to Cloudinary
+    if (file && type !== "text") {
+      if (type === "image") {
+        mediaUrl = await uploadImage(file, "chat-images")
+      } else {
+        mediaUrl = await uploadFile(file, "chat-files")
+        fileName = file.name
+        fileSize = file.size
+      }
+    }
+
     // Add message to messages collection
     const messageRef = await addDoc(collection(db, "messages"), {
       chatRoomId,
@@ -287,8 +412,12 @@ export const sendMessage = async (
       senderName,
       text,
       type,
+      mediaUrl,
+      fileName,
+      fileSize,
       timestamp: serverTimestamp(),
       isRead: false,
+      readBy: [senderId],
     })
 
     // Update chat room with last message
@@ -325,7 +454,7 @@ export const getChatMessages = (chatRoomId: string, callback: (messages: Message
     collection(db, "messages"),
     where("chatRoomId", "==", chatRoomId),
     orderBy("timestamp", "desc"),
-    limit(limitCount),
+    limit(limitCount)
   )
 
   return onSnapshot(q, (querySnapshot) => {
@@ -333,24 +462,36 @@ export const getChatMessages = (chatRoomId: string, callback: (messages: Message
     querySnapshot.forEach((doc) => {
       messages.push({ id: doc.id, ...doc.data() } as Message)
     })
-    // Reverse to show oldest first
-    callback(messages.reverse())
+    // Sort by timestamp ascending for display
+    messages.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis())
+    callback(messages)
   })
 }
 
-export const markMessagesAsRead = async (chatRoomId: string, userId: string) => {
+export const markMessagesAsRead = async (chatRoomId: string, userId: string): Promise<void> => {
   try {
     const q = query(
       collection(db, "messages"),
       where("chatRoomId", "==", chatRoomId),
       where("senderId", "!=", userId),
-      where("isRead", "==", false),
+      where("isRead", "==", false)
     )
 
     const querySnapshot = await getDocs(q)
-    const batch = querySnapshot.docs.map((doc) => updateDoc(doc.ref, { isRead: true }))
+    const updatePromises = querySnapshot.docs.map((doc) => {
+      const messageData = doc.data()
+      const readBy = messageData.readBy || []
+      if (!readBy.includes(userId)) {
+        readBy.push(userId)
+        return updateDoc(doc.ref, {
+          isRead: true,
+          readBy,
+        })
+      }
+      return Promise.resolve()
+    })
 
-    await Promise.all(batch)
+    await Promise.all(updatePromises)
   } catch (error) {
     console.error("Error marking messages as read:", error)
     throw error
@@ -358,13 +499,17 @@ export const markMessagesAsRead = async (chatRoomId: string, userId: string) => 
 }
 
 // Connection operations
-export const createConnection = async (userId1: string, userId2: string, initiatedBy: string): Promise<string> => {
+export const createConnection = async (
+  userId1: string,
+  userId2: string,
+  message?: string
+): Promise<string> => {
   try {
     const docRef = await addDoc(collection(db, "connections"), {
       userId1,
       userId2,
       status: "pending",
-      initiatedBy,
+      message,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
@@ -375,7 +520,10 @@ export const createConnection = async (userId1: string, userId2: string, initiat
   }
 }
 
-export const updateConnectionStatus = async (connectionId: string, status: Connection["status"]) => {
+export const updateConnectionStatus = async (
+  connectionId: string,
+  status: Connection["status"]
+): Promise<void> => {
   try {
     await updateDoc(doc(db, "connections", connectionId), {
       status,
@@ -389,16 +537,15 @@ export const updateConnectionStatus = async (connectionId: string, status: Conne
 
 export const getUserConnections = async (userId: string): Promise<Connection[]> => {
   try {
-    const q1 = query(collection(db, "connections"), where("userId1", "==", userId), where("status", "==", "accepted"))
-    const q2 = query(collection(db, "connections"), where("userId2", "==", userId), where("status", "==", "accepted"))
-
-    const [snapshot1, snapshot2] = await Promise.all([getDocs(q1), getDocs(q2)])
+    const q = query(
+      collection(db, "connections"),
+      where("userId1", "==", userId),
+      where("status", "==", "accepted")
+    )
+    const querySnapshot = await getDocs(q)
 
     const connections: Connection[] = []
-    snapshot1.forEach((doc) => {
-      connections.push({ id: doc.id, ...doc.data() } as Connection)
-    })
-    snapshot2.forEach((doc) => {
+    querySnapshot.forEach((doc) => {
       connections.push({ id: doc.id, ...doc.data() } as Connection)
     })
 
@@ -409,370 +556,86 @@ export const getUserConnections = async (userId: string): Promise<Connection[]> 
   }
 }
 
-// Matching queue operations
-export const joinMatchingQueue = async (
-  userId: string,
-  userDetails: MatchingQueue["userDetails"],
-  preferences: MatchingQueue["preferences"] = {
-    roles: [],
-    skipPreviousMatches: true,
-  },
+// Match operations
+export const createMatch = async (
+  userId1: string,
+  userId2: string,
+  score: number
 ): Promise<string> => {
   try {
-    // Remove user from queue if already exists
-    await leaveMatchingQueue(userId)
-
-    const docRef = await addDoc(collection(db, "matchingQueue"), {
-      userId,
-      userDetails,
-      preferences,
-      status: "waiting",
+    const docRef = await addDoc(collection(db, "matches"), {
+      userId1,
+      userId2,
+      score,
+      status: "pending",
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     })
     return docRef.id
   } catch (error) {
-    console.error("Error joining matching queue:", error)
+    console.error("Error creating match:", error)
     throw error
   }
 }
 
-export const leaveMatchingQueue = async (userId: string) => {
+export const updateMatchStatus = async (
+  matchId: string,
+  status: Match["status"]
+): Promise<void> => {
   try {
-    const q = query(collection(db, "matchingQueue"), where("userId", "==", userId), where("status", "==", "waiting"))
-    const querySnapshot = await getDocs(q)
-
-    const batch = querySnapshot.docs.map((doc) => updateDoc(doc.ref, { status: "cancelled" }))
-
-    await Promise.all(batch)
+    await updateDoc(doc(db, "matches", matchId), {
+      status,
+      updatedAt: serverTimestamp(),
+    })
   } catch (error) {
-    console.error("Error leaving matching queue:", error)
+    console.error("Error updating match status:", error)
     throw error
   }
 }
 
-export const findRandomMatch = async (
+// Search and discovery
+export const searchUsers = async (
+  searchTerm: string,
   currentUserId: string,
-  preferences: MatchingQueue["preferences"],
-): Promise<MatchingQueue | null> => {
+  limitCount = 20
+): Promise<User[]> => {
   try {
-    // Get previous matches to potentially skip
-    const previousMatches = preferences.skipPreviousMatches ? await getPreviousMatches(currentUserId) : []
-
-    // Build query for available matches
+    // Search by name, skills, or company
     const q = query(
-      collection(db, "matchingQueue"),
-      where("status", "==", "waiting"),
-      where("userId", "!=", currentUserId),
-      orderBy("createdAt", "asc"),
-      limit(20),
+      collection(db, "users"),
+      where("isVerified", "==", true),
+      limit(limitCount)
     )
 
     const querySnapshot = await getDocs(q)
-    const availableMatches: MatchingQueue[] = []
-
-    querySnapshot.forEach((doc) => {
-      const match = { id: doc.id, ...doc.data() } as MatchingQueue
-
-      // Filter by role preferences if specified
-      if (preferences.roles.length > 0 && !preferences.roles.includes(match.userDetails.role)) {
-        return
-      }
-
-      // Skip previous matches if preference is set
-      if (preferences.skipPreviousMatches && previousMatches.includes(match.userId)) {
-        return
-      }
-
-      availableMatches.push(match)
-    })
-
-    if (availableMatches.length === 0) {
-      return null
-    }
-
-    // Return the first available match (oldest in queue)
-    return availableMatches[0]
-  } catch (error) {
-    console.error("Error finding random match:", error)
-    throw error
-  }
-}
-
-export const createMatchAndChatRoom = async (
-  user1Id: string,
-  user2Id: string,
-  user1Details: MatchingQueue["userDetails"],
-  user2Details: MatchingQueue["userDetails"],
-): Promise<string> => {
-  try {
-    // Create chat room
-    const chatRoomId = await createChatRoom("random", [user1Id, user2Id], {
-      [user1Id]: user1Details,
-      [user2Id]: user2Details,
-    })
-
-    // Update matching queue entries
-    const q1 = query(collection(db, "matchingQueue"), where("userId", "==", user1Id), where("status", "==", "waiting"))
-    const q2 = query(collection(db, "matchingQueue"), where("userId", "==", user2Id), where("status", "==", "waiting"))
-
-    const [snapshot1, snapshot2] = await Promise.all([getDocs(q1), getDocs(q2)])
-
-    const updates = []
-    snapshot1.forEach((doc) => {
-      updates.push(
-        updateDoc(doc.ref, {
-          status: "matched",
-          matchedWith: user2Id,
-          chatRoomId,
-        }),
-      )
-    })
-    snapshot2.forEach((doc) => {
-      updates.push(
-        updateDoc(doc.ref, {
-          status: "matched",
-          matchedWith: user1Id,
-          chatRoomId,
-        }),
-      )
-    })
-
-    await Promise.all(updates)
-
-    // Add system message to chat room
-    await sendMessage(
-      chatRoomId,
-      "system",
-      "System",
-      "You've been matched! Start the conversation and get to know each other.",
-      "system",
-    )
-
-    // Record match history
-    await addDoc(collection(db, "matchHistory"), {
-      userId1: user1Id,
-      userId2: user2Id,
-      chatRoomId,
-      duration: 0,
-      createdAt: serverTimestamp(),
-    })
-
-    const { notifyNewMatch } = await import("./notifications")
-    await Promise.all([
-      notifyNewMatch(user1Id, user2Details.name, chatRoomId),
-      notifyNewMatch(user2Id, user1Details.name, chatRoomId),
-    ])
-
-    return chatRoomId
-  } catch (error) {
-    console.error("Error creating match and chat room:", error)
-    throw error
-  }
-}
-
-export const getPreviousMatches = async (userId: string): Promise<string[]> => {
-  try {
-    const q1 = query(collection(db, "matchHistory"), where("userId1", "==", userId))
-    const q2 = query(collection(db, "matchHistory"), where("userId2", "==", userId))
-
-    const [snapshot1, snapshot2] = await Promise.all([getDocs(q1), getDocs(q2)])
-
-    const previousMatches: string[] = []
-    snapshot1.forEach((doc) => {
-      const data = doc.data()
-      previousMatches.push(data.userId2)
-    })
-    snapshot2.forEach((doc) => {
-      const data = doc.data()
-      previousMatches.push(data.userId1)
-    })
-
-    return previousMatches
-  } catch (error) {
-    console.error("Error getting previous matches:", error)
-    return []
-  }
-}
-
-export const getMatchingQueueStatus = (userId: string, callback: (status: MatchingQueue | null) => void) => {
-  const q = query(
-    collection(db, "matchingQueue"),
-    where("userId", "==", userId),
-    where("status", "in", ["waiting", "matched"]),
-    orderBy("createdAt", "desc"),
-    limit(1),
-  )
-
-  return onSnapshot(q, (querySnapshot) => {
-    if (querySnapshot.empty) {
-      callback(null)
-      return
-    }
-
-    const doc = querySnapshot.docs[0]
-    callback({ id: doc.id, ...doc.data() } as MatchingQueue)
-  })
-}
-
-// Admin functions for user management and moderation
-export const getAllUsers = async (limitCount = 100): Promise<User[]> => {
-  try {
-    const q = query(collection(db, "users"), orderBy("createdAt", "desc"), limit(limitCount))
-    const querySnapshot = await getDocs(q)
-
     const users: User[] = []
-    querySnapshot.forEach((doc) => {
-      users.push({ id: doc.id, ...doc.data() } as User)
+    
+    querySnapshot.forEach((doc: QueryDocumentSnapshot) => {
+      const userData = doc.data() as User
+      if (doc.id !== currentUserId) {
+        const searchableText = `${userData.firstName} ${userData.lastName} ${userData.skills.join(" ")} ${userData.company || ""}`.toLowerCase()
+        if (searchableText.includes(searchTerm.toLowerCase())) {
+          users.push({ ...userData, id: doc.id })
+        }
+      }
     })
 
     return users
   } catch (error) {
-    console.error("Error getting all users:", error)
-    throw error
-  }
-}
-
-export const getAdminStats = async (): Promise<AdminStats> => {
-  try {
-    const [usersSnapshot, chatRoomsSnapshot, messagesSnapshot, matchHistorySnapshot] = await Promise.all([
-      getDocs(collection(db, "users")),
-      getDocs(collection(db, "chatRooms")),
-      getDocs(collection(db, "messages")),
-      getDocs(collection(db, "matchHistory")),
-    ])
-
-    const users = usersSnapshot.docs.map((doc) => doc.data() as User)
-    const chatRooms = chatRoomsSnapshot.docs.map((doc) => doc.data() as ChatRoom)
-
-    const activeUsers = users.filter((user) => user.isOnline).length
-    const activeChatRooms = chatRooms.filter((room) => room.isActive).length
-
-    return {
-      totalUsers: users.length,
-      activeUsers,
-      totalChatRooms: chatRooms.length,
-      activeChatRooms,
-      totalMessages: messagesSnapshot.size,
-      totalMatches: matchHistorySnapshot.size,
-      reportedUsers: 0, // Will be implemented with reports
-      blockedUsers: users.filter((user) => user.isVerified === false).length,
-    }
-  } catch (error) {
-    console.error("Error getting admin stats:", error)
-    throw error
-  }
-}
-
-export const suspendUser = async (userId: string, reason: string, adminId: string) => {
-  try {
-    await updateDoc(doc(db, "users", userId), {
-      isVerified: false,
-      suspensionReason: reason,
-      suspendedBy: adminId,
-      suspendedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    })
-  } catch (error) {
-    console.error("Error suspending user:", error)
-    throw error
-  }
-}
-
-export const unsuspendUser = async (userId: string, adminId: string) => {
-  try {
-    await updateDoc(doc(db, "users", userId), {
-      isVerified: true,
-      suspensionReason: null,
-      suspendedBy: null,
-      suspendedAt: null,
-      unsuspendedBy: adminId,
-      unsuspendedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    })
-  } catch (error) {
-    console.error("Error unsuspending user:", error)
-    throw error
-  }
-}
-
-export const createUserReport = async (
-  reportedUserId: string,
-  reportedBy: string,
-  reason: string,
-  description: string,
-  chatRoomId?: string,
-  messageId?: string,
-): Promise<string> => {
-  try {
-    const docRef = await addDoc(collection(db, "userReports"), {
-      reportedUserId,
-      reportedBy,
-      reason,
-      description,
-      status: "pending",
-      chatRoomId,
-      messageId,
-      createdAt: serverTimestamp(),
-    })
-    return docRef.id
-  } catch (error) {
-    console.error("Error creating user report:", error)
-    throw error
-  }
-}
-
-export const getAllReports = async (): Promise<UserReport[]> => {
-  try {
-    const q = query(collection(db, "userReports"), orderBy("createdAt", "desc"))
-    const querySnapshot = await getDocs(q)
-
-    const reports: UserReport[] = []
-    querySnapshot.forEach((doc) => {
-      reports.push({ id: doc.id, ...doc.data() } as UserReport)
-    })
-
-    return reports
-  } catch (error) {
-    console.error("Error getting all reports:", error)
-    throw error
-  }
-}
-
-export const updateReportStatus = async (reportId: string, status: UserReport["status"], adminId: string) => {
-  try {
-    await updateDoc(doc(db, "userReports", reportId), {
-      status,
-      reviewedBy: adminId,
-      reviewedAt: serverTimestamp(),
-    })
-  } catch (error) {
-    console.error("Error updating report status:", error)
+    console.error("Error searching users:", error)
     throw error
   }
 }
 
 // Utility functions
-export const generateSessionId = (): string => {
-  return Math.random().toString(36).substring(2, 8).toUpperCase()
-}
-
-export const generateInviteCode = (): string => {
-  return Math.random().toString(36).substring(2, 10).toUpperCase()
-}
-
-export const getUserByInviteCode = async (inviteCode: string): Promise<User | null> => {
-  try {
-    const q = query(collection(db, "users"), where("inviteCode", "==", inviteCode))
-    const querySnapshot = await getDocs(q)
-
-    if (querySnapshot.empty) {
-      return null
-    }
-
-    const doc = querySnapshot.docs[0]
-    return { id: doc.id, ...doc.data() } as User
-  } catch (error) {
-    console.error("Error getting user by invite code:", error)
-    throw error
-  }
+export const formatTimestamp = (timestamp: Timestamp): string => {
+  if (!timestamp) return ""
+  const date = timestamp.toDate()
+  const now = new Date()
+  const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+  
+  if (diffInHours < 1) return "Just now"
+  if (diffInHours < 24) return `${Math.floor(diffInHours)}h ago`
+  if (diffInHours < 168) return `${Math.floor(diffInHours / 24)}d ago`
+  return date.toLocaleDateString()
 }

@@ -1,280 +1,319 @@
 "use client"
 
 import { useState } from "react"
-import { useUser, useClerk } from "@clerk/nextjs"
-import { useRouter } from "next/navigation"
+import { useUser } from "@clerk/nextjs"
+import { useFirebaseUser } from "@/hooks/use-firebase-user"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Users, Linkedin, ArrowRight, Plus, X } from "lucide-react"
-import Link from "next/link"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useToast } from "@/hooks/use-toast"
+import { 
+  User, 
+  Building2, 
+  FileText, 
+  Linkedin, 
+  Code, 
+  Sparkles,
+  CheckCircle,
+  ArrowRight,
+  Crown,
+  Shield,
+  Star
+} from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useTheme } from "@/components/theme-provider"
 
 export default function OnboardingPage() {
   const { user } = useUser()
-  const { signOut } = useClerk()
+  const { firebaseUser, updateFirebaseUser } = useFirebaseUser()
+  const { toast } = useToast()
   const router = useRouter()
-  const [step, setStep] = useState(1)
+  const { currentTheme, isDarkMode } = useTheme()
+  
   const [formData, setFormData] = useState({
-    role: "",
-    company: "",
-    position: "",
-    college: "",
-    graduationYear: "",
-    skills: [] as string[],
-    bio: "",
-    linkedinUrl: "",
+    firstName: user?.firstName || "",
+    lastName: user?.lastName || "",
+    email: user?.emailAddresses[0]?.emailAddress || "",
+    role: firebaseUser?.role || "professional",
+    company: firebaseUser?.company || "",
+    bio: firebaseUser?.bio || "",
+    linkedinUrl: firebaseUser?.linkedinUrl || "",
+    skills: firebaseUser?.skills || [],
   })
-  const [newSkill, setNewSkill] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
 
-  const addSkill = () => {
-    if (newSkill.trim() && !formData.skills.includes(newSkill.trim())) {
-      setFormData((prev) => ({
-        ...prev,
-        skills: [...prev.skills, newSkill.trim()],
-      }))
-      setNewSkill("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+
+    try {
+      // Ensure all fields have default values
+      const cleanFormData = {
+        firstName: formData.firstName || "",
+        lastName: formData.lastName || "",
+        email: formData.email || "",
+        role: formData.role || "professional",
+        company: formData.company || "",
+        bio: formData.bio || "",
+        linkedinUrl: formData.linkedinUrl || "",
+        skills: formData.skills || [],
+      }
+
+      await updateFirebaseUser(cleanFormData)
+      
+      toast({
+        title: "Profile Updated!",
+        description: "Your profile has been successfully updated.",
+      })
+      
+      router.push("/dashboard")
+    } catch (error) {
+      console.error("Error updating profile:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update profile. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  const removeSkill = (skill: string) => {
-    setFormData((prev) => ({
+  const handleInputChange = (field: string, value: string | string[]) => {
+    setFormData(prev => ({
       ...prev,
-      skills: prev.skills.filter((s) => s !== skill),
+      [field]: value
     }))
   }
 
-  const handleNext = () => {
-    if (step < 3) {
-      setStep(step + 1)
+  const addSkill = (skill: string) => {
+    if (skill.trim() && !formData.skills.includes(skill.trim())) {
+      handleInputChange("skills", [...formData.skills, skill.trim()])
     }
   }
 
-  const handleComplete = async () => {
-    setIsLoading(true)
-    try {
-      // Update user metadata with onboarding data
-      await user?.update({
-        publicMetadata: {
-          ...formData,
-          onboardingCompleted: true,
-        },
-      })
-      router.push("/dashboard")
-    } catch (error) {
-      console.error("Error completing onboarding:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const connectLinkedIn = () => {
-    // This would integrate with LinkedIn API in a real implementation
-    alert("LinkedIn integration would be implemented here")
+  const removeSkill = (skillToRemove: string) => {
+    handleInputChange("skills", formData.skills.filter(skill => skill !== skillToRemove))
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl space-y-6">
-        {/* Header */}
-        <div className="text-center space-y-2">
-          <Link href="/" className="inline-flex items-center space-x-2 mb-4">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <Users className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="font-serif font-bold text-xl text-foreground">KonvoGrad</span>
-          </Link>
-          <h1 className="font-serif font-bold text-2xl text-foreground">Complete Your Profile</h1>
-          <p className="text-muted-foreground">Help us connect you with the right professionals</p>
-
-          {/* Progress indicator */}
-          <div className="flex justify-center space-x-2 mt-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className={`w-3 h-3 rounded-full ${i <= step ? "bg-primary" : "bg-muted"}`} />
-            ))}
+    <div className={`min-h-screen ${isDarkMode ? currentTheme.darkBackground : currentTheme.background} flex items-center justify-center p-4`}>
+      <div className="w-full max-w-2xl">
+        <Card className={`${isDarkMode ? currentTheme.darkCard : currentTheme.card} border-2 shadow-lg bounce-in`}>
+          <CardHeader className="text-center space-y-4">
+            <div className="flex items-center justify-center space-x-3">
+              <div className={`w-12 h-12 bg-gradient-to-r ${currentTheme.primary} rounded-xl flex items-center justify-center shadow-lg`}>
+                <Crown className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-2xl text-foreground">Complete Your Profile</CardTitle>
+                <CardDescription className="text-muted-foreground">Let's get you set up for professional networking</CardDescription>
           </div>
         </div>
+            
+            <div className="flex items-center justify-center space-x-2">
+              <Badge className={`bg-gradient-to-r ${currentTheme.primary} text-white`}>
+                <Shield className="w-3 h-3 mr-1" />
+                Session {firebaseUser?.sessionId?.slice(-6) || "Loading..."}
+              </Badge>
+              <Badge variant="outline" className="border-2 border-border/20">
+                <Star className="w-3 h-3 mr-1" />
+                Professional
+              </Badge>
+                 </div>
+               </CardHeader>
 
-        <Card className="border-border/50">
-          <CardHeader>
-            <CardTitle className="font-serif">
-              {step === 1 && "Professional Information"}
-              {step === 2 && "Skills & Experience"}
-              {step === 3 && "LinkedIn Verification"}
-            </CardTitle>
-            <CardDescription>
-              {step === 1 && "Tell us about your professional background"}
-              {step === 2 && "Add your skills and write a brief bio"}
-              {step === 3 && "Connect your LinkedIn for verification"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {step === 1 && (
+               <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Basic Information */}
               <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <User className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-lg text-foreground">Basic Information</h3>
+                   </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName" className="text-foreground">First Name</Label>
+                      <Input
+                        id="firstName"
+                        value={formData.firstName}
+                      onChange={(e) => handleInputChange("firstName", e.target.value)}
+                      className="border-2 border-border/20 bg-muted/50"
+                      placeholder="Enter your first name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName" className="text-foreground">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        value={formData.lastName}
+                      onChange={(e) => handleInputChange("lastName", e.target.value)}
+                      className="border-2 border-border/20 bg-muted/50"
+                      placeholder="Enter your last name"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="role">Role</Label>
-                  <Select
-                    value={formData.role}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, role: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select your role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="alumni">Alumni</SelectItem>
-                      <SelectItem value="developer">Developer</SelectItem>
-                      <SelectItem value="student">Student</SelectItem>
-                      <SelectItem value="professional">Professional</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="company">Company</Label>
-                    <Input
-                      id="company"
-                      placeholder="Your current company"
-                      value={formData.company}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="position">Position</Label>
-                    <Input
-                      id="position"
-                      placeholder="Your job title"
-                      value={formData.position}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, position: e.target.value }))}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="college">College/University</Label>
-                    <Input
-                      id="college"
-                      placeholder="Your alma mater"
-                      value={formData.college}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, college: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="graduationYear">Graduation Year</Label>
-                    <Input
-                      id="graduationYear"
-                      placeholder="2020"
-                      value={formData.graduationYear}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, graduationYear: e.target.value }))}
-                    />
-                  </div>
+                  <Label htmlFor="email" className="text-foreground">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={formData.email}
+                    onChange={(e) => handleInputChange("email", e.target.value)}
+                    className="border-2 border-border/20 bg-muted/50"
+                    placeholder="Enter your email"
+                  />
                 </div>
               </div>
-            )}
 
-            {step === 2 && (
+              {/* Professional Information */}
               <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Building2 className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-lg text-foreground">Professional Information</h3>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="role" className="text-foreground">Role</Label>
+                    <select
+                         id="role"
+                         value={formData.role}
+                      onChange={(e) => handleInputChange("role", e.target.value)}
+                      className="w-full p-3 border-2 border-border/20 bg-muted/50 rounded-md text-foreground"
+                    >
+                      <option value="professional">Professional</option>
+                      <option value="student">Student</option>
+                      <option value="entrepreneur">Entrepreneur</option>
+                      <option value="freelancer">Freelancer</option>
+                      <option value="consultant">Consultant</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="company" className="text-foreground">Company</Label>
+                      <Input
+                        id="company"
+                        value={formData.company}
+                      onChange={(e) => handleInputChange("company", e.target.value)}
+                      className="border-2 border-border/20 bg-muted/50"
+                      placeholder="Enter your company"
+                    />
+                      </div>
+                    </div>
+
                 <div className="space-y-2">
-                  <Label>Skills</Label>
+                  <Label htmlFor="bio" className="text-foreground">Bio</Label>
+                  <textarea
+                        id="bio"
+                        value={formData.bio}
+                    onChange={(e) => handleInputChange("bio", e.target.value)}
+                    className="w-full p-3 border-2 border-border/20 bg-muted/50 rounded-md text-foreground resize-none"
+                    rows={3}
+                    placeholder="Tell us about yourself..."
+                  />
+                </div>
+              </div>
+
+              {/* Skills */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Code className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-lg text-foreground">Skills</h3>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="skillInput" className="text-foreground">Add Skills</Label>
                   <div className="flex space-x-2">
                     <Input
-                      placeholder="Add a skill"
-                      value={newSkill}
-                      onChange={(e) => setNewSkill(e.target.value)}
-                      onKeyPress={(e) => e.key === "Enter" && addSkill()}
+                      id="skillInput"
+                      className="border-2 border-border/20 bg-muted/50"
+                      placeholder="Enter a skill"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          addSkill(e.currentTarget.value)
+                          e.currentTarget.value = ''
+                        }
+                      }}
                     />
-                    <Button type="button" variant="outline" size="icon" onClick={addSkill}>
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {formData.skills.map((skill) => (
-                      <Badge key={skill} variant="secondary" className="flex items-center space-x-1">
-                        <span>{skill}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeSkill(skill)}
-                          className="ml-1 hover:text-destructive"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        const input = document.getElementById('skillInput') as HTMLInputElement
+                        if (input) {
+                          addSkill(input.value)
+                          input.value = ''
+                        }
+                      }}
+                      className={`bg-gradient-to-r ${currentTheme.primary} text-white btn-animate`}
+                    >
+                      Add
+                        </Button>
+                      </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="bio">Bio</Label>
-                  <Textarea
-                    id="bio"
-                    placeholder="Tell us about yourself and your professional interests..."
-                    rows={4}
-                    value={formData.bio}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
-                  />
-                </div>
-              </div>
-            )}
-
-            {step === 3 && (
-              <div className="space-y-4">
-                <div className="text-center space-y-4">
-                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
-                    <Linkedin className="w-8 h-8 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-serif font-semibold text-lg">Connect LinkedIn</h3>
-                    <p className="text-muted-foreground text-sm">
-                      We'll verify your professional profile to ensure authentic connections
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="linkedinUrl">LinkedIn Profile URL (Optional)</Label>
-                  <Input
-                    id="linkedinUrl"
-                    placeholder="https://linkedin.com/in/yourprofile"
-                    value={formData.linkedinUrl}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, linkedinUrl: e.target.value }))}
-                  />
-                </div>
-
-                <Button type="button" variant="outline" className="w-full bg-transparent" onClick={connectLinkedIn}>
-                  <Linkedin className="w-4 h-4 mr-2" />
-                  Connect LinkedIn Account
-                </Button>
-              </div>
-            )}
-
-            <div className="flex justify-between pt-4">
-              <div className="flex space-x-2">
-                {step > 1 && (
-                  <Button variant="outline" onClick={() => setStep(step - 1)}>
-                    Back
-                  </Button>
-                )}
-                <Button variant="ghost" onClick={() => signOut()} className="text-muted-foreground">
-                  Sign Out
-                </Button>
-              </div>
-
-              {step < 3 ? (
-                <Button onClick={handleNext} disabled={!formData.role}>
-                  Next
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              ) : (
-                <Button onClick={handleComplete} disabled={isLoading}>
-                  {isLoading ? "Completing..." : "Complete Setup"}
-                </Button>
+                {formData.skills.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                          {formData.skills.map((skill, index) => (
+                      <Badge
+                        key={index}
+                        variant="secondary"
+                        className="border-2 border-border/20 hover:scale-105 transition-transform duration-200 cursor-pointer"
+                                  onClick={() => removeSkill(skill)}
+                                >
+                        {skill} ×
+                              </Badge>
+                          ))}
+                      </div>
               )}
             </div>
+
+              {/* LinkedIn */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Linkedin className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-lg text-foreground">LinkedIn Profile</h3>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="linkedinUrl" className="text-foreground">LinkedIn URL</Label>
+                  <Input
+                    id="linkedinUrl"
+                    type="url"
+                    value={formData.linkedinUrl}
+                    onChange={(e) => handleInputChange("linkedinUrl", e.target.value)}
+                    className="border-2 border-border/20 bg-muted/50"
+                    placeholder="https://linkedin.com/in/yourprofile"
+                  />
+                </div>
+              </div>
+
+              {/* Submit Button */}
+                                 <Button 
+                   type="submit"
+                   disabled={isSubmitting}
+                className={`w-full ${currentTheme.button} text-white font-semibold btn-animate`}
+                 >
+                  {isSubmitting ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Updating Profile...</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle className="w-5 h-5" />
+                    <span>Complete Profile</span>
+                    <ArrowRight className="w-5 h-5" />
+                  </div>
+                  )}
+                </Button>
+        </form>
           </CardContent>
         </Card>
       </div>
