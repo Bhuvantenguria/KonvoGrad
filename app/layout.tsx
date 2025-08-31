@@ -6,6 +6,11 @@ import "./globals.css"
 export const metadata: Metadata = {
   title: "KonvoGrad - Professional Networking Platform",
   description: "Connect with alumni and developers through secure video and text conversations",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
   keywords: ["networking", "professional", "alumni", "developers", "video chat", "matching"],
   authors: [{ name: "KonvoGrad Team" }],
   creator: "KonvoGrad",
