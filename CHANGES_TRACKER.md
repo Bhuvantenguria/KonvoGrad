@@ -172,8 +172,11 @@
 
 ### 27. `KonvoGrad/tsconfig.json` & `next.config.mjs`
 - Mapped Firebase module declarations in `tsconfig.json` paths to `@firebase/*` entry points.
-- Added Webpack resolve aliases in `next.config.mjs` mapping `firebase/*` to their bundle distribution files.
+- Switched Webpack resolve aliases in `next.config.mjs` to use Node's `createRequire(import.meta.url).resolve(...)` to automatically locate Firebase bundle distributions dynamically across npm, pnpm, and yarn environments.
 - Removed `typescript: { ignoreBuildErrors: true }` to enforce strict type checking on builds.
+
+### 28. `KonvoGrad/components/ui/badge.tsx`
+- Decoupled `Badge` from `@radix-ui/react-slot` by using standard span rendering, eliminating build and typecheck failures on strict package managers (such as pnpm on Vercel) where `@radix-ui/react-slot` is not hoisted.
 
 ---
 

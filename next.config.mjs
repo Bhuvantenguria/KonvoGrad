@@ -1,8 +1,6 @@
-import path from "path"
-import { fileURLToPath } from "url"
+import { createRequire } from "module"
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+const require = createRequire(import.meta.url)
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -17,12 +15,16 @@ const nextConfig = {
     workerThreads: false,
   },
   webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      "firebase/app": path.resolve(__dirname, "node_modules/firebase/app/dist/index.cjs.js"),
-      "firebase/firestore": path.resolve(__dirname, "node_modules/firebase/firestore/dist/index.cjs.js"),
-      "firebase/auth": path.resolve(__dirname, "node_modules/firebase/auth/dist/index.cjs.js"),
-      "firebase/messaging": path.resolve(__dirname, "node_modules/firebase/messaging/dist/index.cjs.js"),
+    try {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        "firebase/app": require.resolve("firebase/app"),
+        "firebase/firestore": require.resolve("firebase/firestore"),
+        "firebase/auth": require.resolve("firebase/auth"),
+        "firebase/messaging": require.resolve("firebase/messaging"),
+      }
+    } catch {
+      // Fallback if resolve fails
     }
     return config
   },
