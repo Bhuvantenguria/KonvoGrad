@@ -178,6 +178,10 @@
 ### 28. `KonvoGrad/components/ui/badge.tsx`
 - Decoupled `Badge` from `@radix-ui/react-slot` by using standard span rendering, eliminating build and typecheck failures on strict package managers (such as pnpm on Vercel) where `@radix-ui/react-slot` is not hoisted.
 
+### 29. `KonvoGrad/hooks/use-firebase-user.ts` & `lib/firebase-client-utils.ts`
+- Resolved `Timestamp` vs `Date` type mismatch on `User.lastSeen`. Exported `Timestamp` from `firebase-client-utils` and used `Timestamp.now()` in `use-firebase-user.ts`.
+- Expanded `User` timestamp properties (`lastSeen`, `createdAt`, `updatedAt`, `suspendedAt`, `unsuspendedAt`) to accept `Timestamp | Date | any` across both client and server utility definitions.
+
 ---
 
 ## 🧪 3. Route & Endpoint Verification Matrix

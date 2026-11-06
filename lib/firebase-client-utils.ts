@@ -12,7 +12,7 @@ import {
   limit,
   onSnapshot,
   serverTimestamp,
-  type Timestamp,
+  Timestamp,
   type QueryDocumentSnapshot,
   type QuerySnapshot,
   type DocumentData,
@@ -20,6 +20,8 @@ import {
 } from "firebase/firestore"
 import { db } from "./firebase"
 import { uploadImage, uploadFile } from "./cloudinary"
+
+export { Timestamp }
 
 // Types
 export interface User {
@@ -39,16 +41,16 @@ export interface User {
   linkedinUrl?: string
   isVerified: boolean
   isOnline: boolean
-  lastSeen: Timestamp
+  lastSeen: Timestamp | Date | any
   sessionId: string
   inviteCode: string
-  createdAt: Timestamp
-  updatedAt: Timestamp
+  createdAt: Timestamp | Date | any
+  updatedAt: Timestamp | Date | any
   suspensionReason?: string
   suspendedBy?: string
-  suspendedAt?: Timestamp
+  suspendedAt?: Timestamp | Date | any
   unsuspendedBy?: string
-  unsuspendedAt?: Timestamp
+  unsuspendedAt?: Timestamp | Date | any
 }
 
 export interface ChatRoom {

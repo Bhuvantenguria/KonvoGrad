@@ -9,6 +9,7 @@ import {
   updateUserOnlineStatusClient,
   generateSessionId,
   generateInviteCode,
+  Timestamp,
   type User,
 } from "@/lib/firebase-client-utils"
 
@@ -50,7 +51,7 @@ export function useFirebaseUser() {
             linkedinUrl: clerkUser.publicMetadata?.linkedinUrl as string || "",
             isVerified: false,
             isOnline: true,
-            lastSeen: new Date(),
+            lastSeen: Timestamp.now(),
             sessionId: generateSessionId(),
             inviteCode: generateInviteCode(),
           }
