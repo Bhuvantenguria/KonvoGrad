@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useFirebaseUser } from "@/hooks/use-firebase-user"
 import { useChat } from "@/hooks/use-chat"
 import { Button } from "@/components/ui/button"
@@ -41,14 +40,15 @@ export default function ChatPage() {
   const { chatRooms, currentChatRoom, messages, loading: chatLoading, sendChatMessage, selectChatRoom } = useChat(firebaseUser?.id || "")
   const router = useRouter()
   const { currentTheme, isDarkMode } = useTheme()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const [searchQuery, setSearchQuery] = useState("")
   const [messageText, setMessageText] = useState("")
   const [isMobileView, setIsMobileView] = useState(false)
 
   const filteredChatRooms = chatRooms.filter((room) =>
-    Object.values(room.participantDetails).some((participant: any) =>
-      participant.name?.toLowerCase().includes(searchQuery.toLowerCase())
+    Object.values(room.participantDetails || {}).some((participant: any) =>
+      participant?.name?.toLowerCase().includes(searchQuery.toLowerCase())
     )
   )
 
@@ -57,13 +57,14 @@ export default function ChatPage() {
     if (!messageText.trim() || !currentChatRoom || !firebaseUser) return
 
     try {
+      const text = messageText.trim()
+      setMessageText("")
       await sendChatMessage(
         currentChatRoom.id,
         firebaseUser.id,
-        `${firebaseUser.firstName} ${firebaseUser.lastName}`,
-        messageText.trim(),
+        `${firebaseUser.firstName || "User"} ${firebaseUser.lastName || ""}`.trim(),
+        text,
       )
-      setMessageText("")
     } catch (error) {
       console.error("Error sending message:", error)
     }
@@ -75,11 +76,30 @@ export default function ChatPage() {
     }
   }
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !currentChatRoom || !firebaseUser) return
+
+    try {
+      const type = file.type.startsWith("image/") ? "image" : "file"
+      await sendChatMessage(
+        currentChatRoom.id,
+        firebaseUser.id,
+        `${firebaseUser.firstName || "User"} ${firebaseUser.lastName || ""}`.trim(),
+        file.name,
+        type,
+        file
+      )
+    } catch (error) {
+      console.error("Error uploading file in chat:", error)
+    }
+  }
+
   if (userLoading) {
     return (
       <div className={`min-h-screen ${isDarkMode ? currentTheme.darkBackground : currentTheme.background} flex items-center justify-center`}>
         <div className="flex items-center space-x-3">
-          <div className={`w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin`}></div>
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
           <span className="text-foreground font-medium">Loading chat...</span>
         </div>
       </div>
@@ -107,7 +127,12 @@ export default function ChatPage() {
                 </div>
                 <h2 className="font-bold text-lg text-foreground">Messages</h2>
               </div>
-              <Button size="sm" variant="outline" className={`border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => router.push("/match")}
+                className={`border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`}
+              >
                 <MessageCircle className="w-4 h-4 mr-2" />
                 New Chat
               </Button>
@@ -132,11 +157,10 @@ export default function ChatPage() {
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
               </div>
             ) : filteredChatRooms.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-2 p-2">
                 {filteredChatRooms.map((room) => {
-                  const otherParticipant = Object.values(room.participantDetails).find(
-                    (p: any) => p.name !== `${firebaseUser?.firstName} ${firebaseUser?.lastName}`
-                  ) as any
+                  const otherUserId = room.participants.find((id) => id !== firebaseUser?.id)
+                  const otherParticipant = otherUserId ? room.participantDetails?.[otherUserId] : null
 
                   const isSelected = currentChatRoom?.id === room.id
 
@@ -161,8 +185,8 @@ export default function ChatPage() {
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{otherParticipant?.name || "Unknown User"}</p>
-                        <p className="text-sm text-muted-foreground truncate">
+                        <p className="font-medium truncate">{otherParticipant?.name || "Professional"}</p>
+                        <p className="text-sm opacity-80 truncate">
                           {room.lastMessage?.text || "No messages yet"}
                         </p>
                       </div>
@@ -179,7 +203,12 @@ export default function ChatPage() {
                   <MessageCircle className="w-8 h-8 text-white" />
                 </div>
                 <p className="text-muted-foreground text-sm mb-4">No conversations yet</p>
-                <Button variant="ghost" size="sm" className={`${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => router.push("/match")}
+                  className={`${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`}
+                >
                   Start a new chat
                 </Button>
               </div>
@@ -192,43 +221,59 @@ export default function ChatPage() {
           {currentChatRoom ? (
             <>
               {/* Chat Header */}
-              <div className={`p-4 border-b-2 border-border/20 ${isDarkMode ? 'bg-slate-800/50' : 'bg-white/50'} backdrop-blur-sm flex items-center justify-between`}>
-                <div className="flex items-center space-x-3">
-                  <Button variant="ghost" size="icon" className="md:hidden hover:scale-110 transition-transform duration-200" onClick={() => setIsMobileView(false)}>
-                    <ArrowLeft className="w-5 h-5" />
-                  </Button>
-                  <Avatar className="w-10 h-10 border-2 border-border/20">
-                    <AvatarImage src="/placeholder.svg" />
-                    <AvatarFallback className="bg-gradient-to-r from-white to-gray-200 font-bold">
-                      {Object.values(currentChatRoom.participantDetails).find(
-                        (p: any) => p.name !== `${firebaseUser?.firstName} ${firebaseUser?.lastName}`,
-                      )?.name?.[0] || "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-medium text-foreground">
-                      {Object.values(currentChatRoom.participantDetails)
-                        .filter((p: any) => p.name !== `${firebaseUser?.firstName} ${firebaseUser?.lastName}`)
-                        .map((p: any) => p.name)
-                        .join(", ")}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {currentChatRoom.isActive ? "Online" : "Offline"}
-                    </p>
+              {(() => {
+                const otherUserId = currentChatRoom.participants.find((id) => id !== firebaseUser?.id)
+                const otherParticipant = otherUserId ? currentChatRoom.participantDetails?.[otherUserId] : null
+                const displayName = otherParticipant?.name || "Professional"
+
+                return (
+                  <div className={`p-4 border-b-2 border-border/20 ${isDarkMode ? 'bg-slate-800/50' : 'bg-white/50'} backdrop-blur-sm flex items-center justify-between`}>
+                    <div className="flex items-center space-x-3">
+                      <Button variant="ghost" size="icon" className="md:hidden hover:scale-110 transition-transform duration-200" onClick={() => setIsMobileView(false)}>
+                        <ArrowLeft className="w-5 h-5" />
+                      </Button>
+                      <Avatar className="w-10 h-10 border-2 border-border/20">
+                        <AvatarImage src={otherParticipant?.imageUrl || "/placeholder.svg"} />
+                        <AvatarFallback className="bg-gradient-to-r from-white to-gray-200 font-bold">
+                          {displayName[0] || "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-foreground">{displayName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {currentChatRoom.isActive ? "Online" : "Offline"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleVideoCall}
+                        className={`${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}
+                      >
+                        <Phone className="w-5 h-5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleVideoCall}
+                        className={`${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}
+                      >
+                        <Video className="w-5 h-5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => router.push("/match")}
+                        className={`${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}
+                      >
+                        <MoreVertical className="w-5 h-5" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button variant="ghost" size="icon" className={`${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}>
-                    <Phone className="w-5 h-5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={handleVideoCall} className={`${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}>
-                    <Video className="w-5 h-5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className={`${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}>
-                    <MoreVertical className="w-5 h-5" />
-                  </Button>
-                </div>
-              </div>
+                )
+              })()}
 
               {/* Messages */}
               <ScrollArea className="flex-1 p-4">
@@ -236,6 +281,10 @@ export default function ChatPage() {
                   {messages.length > 0 ? (
                     messages.map((message) => {
                       const isOwnMessage = message.senderId === firebaseUser?.id
+                      const timeStr = message.timestamp?.toDate
+                        ? formatDistanceToNow(message.timestamp.toDate(), { addSuffix: true })
+                        : "Just now"
+
                       return (
                         <div
                           key={message.id}
@@ -266,15 +315,14 @@ export default function ChatPage() {
                                 isOwnMessage ? "text-white/70" : "text-muted-foreground",
                               )}
                             >
-                              {formatDistanceToNow(message.timestamp.toDate ? message.timestamp.toDate() : new Date(message.timestamp), { addSuffix: true })}
+                              {timeStr}
                             </p>
                           </div>
                           {isOwnMessage && (
                             <Avatar className="w-8 h-8 border-2 border-border/20">
                               <AvatarImage src={firebaseUser?.imageUrl || "/placeholder.svg"} />
                               <AvatarFallback className="text-xs bg-gradient-to-r from-white to-gray-200 font-bold">
-                                {firebaseUser?.firstName?.[0]}
-                                {firebaseUser?.lastName?.[0]}
+                                {firebaseUser?.firstName?.[0] || "U"}
                               </AvatarFallback>
                             </Avatar>
                           )}
@@ -283,7 +331,7 @@ export default function ChatPage() {
                     })
                   ) : (
                     <div className="text-center py-8">
-                      <div className={`w-16 h-16 bg-gradient-to-r ${currentTheme.primary} rounded-full flex items-center justify-center mx-auto shadow-lg`}>
+                      <div className={`w-16 h-16 bg-gradient-to-r ${currentTheme.primary} rounded-full flex items-center justify-center mx-auto shadow-lg mb-3`}>
                         <MessageCircle className="w-8 h-8 text-white" />
                       </div>
                       <p className="text-muted-foreground">Start the conversation!</p>
@@ -295,7 +343,19 @@ export default function ChatPage() {
               {/* Message Input */}
               <div className={`p-4 border-t-2 border-border/20 ${isDarkMode ? 'bg-slate-800/50' : 'bg-white/50'} backdrop-blur-sm`}>
                 <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
-                  <Button type="button" variant="ghost" size="icon" className={`${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}
+                  >
                     <Paperclip className="w-5 h-5" />
                   </Button>
                   <div className="relative flex-1">
@@ -309,6 +369,7 @@ export default function ChatPage() {
                       type="button"
                       variant="ghost"
                       size="icon"
+                      onClick={() => setMessageText((prev) => prev + " 😊")}
                       className={`absolute right-1 top-1/2 transform -translate-y-1/2 ${isDarkMode ? 'hover:bg-slate-700/20' : 'hover:bg-white/20'} text-foreground hover:scale-110 transition-transform duration-200`}
                     >
                       <Smile className="w-4 h-4" />
@@ -330,7 +391,11 @@ export default function ChatPage() {
                   <h3 className="font-bold text-lg mb-2 text-foreground">Select a conversation</h3>
                   <p className="text-muted-foreground text-sm">Choose a chat from the sidebar to start messaging</p>
                 </div>
-                <Button variant="outline" className={`border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`}>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/match")}
+                  className={`border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`}
+                >
                   <MessageCircle className="w-4 h-4 mr-2" />
                   Start New Chat
                 </Button>

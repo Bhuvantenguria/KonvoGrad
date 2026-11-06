@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
-import { updateUser } from "@/lib/firebase-utils"
+import { updateUser, getUserByClerkId } from "@/lib/firebase-utils"
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
+    const { userId: clerkId } = await auth()
+    if (!clerkId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -14,13 +14,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "LinkedIn profile data required" }, { status: 400 })
     }
 
+    // Look up user by clerkId
+    const existingUser = await getUserByClerkId(clerkId)
+    if (!existingUser) {
+      return NextResponse.json({ error: "User record not found" }, { status: 404 })
+    }
+
     // Update user with LinkedIn verification data
-    await updateUser(userId, {
+    await updateUser(existingUser.id, {
       isVerified: true,
-      linkedinUrl: `https://linkedin.com/in/${linkedinProfile.id}`,
-      firstName: linkedinProfile.firstName,
-      lastName: linkedinProfile.lastName,
-      // You can add more fields here as needed
+      linkedinUrl: linkedinProfile.id ? `https://linkedin.com/in/${linkedinProfile.id}` : existingUser.linkedinUrl,
+      firstName: linkedinProfile.firstName || existingUser.firstName,
+      lastName: linkedinProfile.lastName || existingUser.lastName,
     })
 
     return NextResponse.json({ 

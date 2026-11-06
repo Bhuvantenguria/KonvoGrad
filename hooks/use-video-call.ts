@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react"
 import { WebRTCManager } from "@/lib/webrtc-utils"
+import { getChatMessagesClient, sendMessageClient } from "@/lib/firebase-client-utils"
 
 interface Message {
   id: string
@@ -37,6 +38,22 @@ export function useVideoCall(chatRoomId: string, userId: string, remoteUserId: s
         setCallStatus("connected")
       })
 
+      webrtcManagerRef.current.onCallRequest(() => {
+        setIsIncomingCall(true)
+        setCallStatus("ringing")
+      })
+
+      webrtcManagerRef.current.onCallAccept(() => {
+        setCallStatus("connected")
+      })
+
+      webrtcManagerRef.current.onCallReject(() => {
+        setIsCallActive(false)
+        setIsIncomingCall(false)
+        setCallStatus("ended")
+        setTimeout(() => setCallStatus("idle"), 2000)
+      })
+
       webrtcManagerRef.current.onCallEnd(() => {
         endCall()
       })
@@ -48,6 +65,22 @@ export function useVideoCall(chatRoomId: string, userId: string, remoteUserId: s
       }
     }
   }, [chatRoomId, userId, remoteUserId])
+
+  // Sync in-call messages via Firestore
+  useEffect(() => {
+    if (!chatRoomId) return
+    const unsubscribe = getChatMessagesClient(chatRoomId, (msgs) => {
+      setMessages(
+        msgs.map((m) => ({
+          id: m.id,
+          text: m.text,
+          senderId: m.senderId,
+          timestamp: m.timestamp?.toDate ? m.timestamp.toDate() : new Date(),
+        }))
+      )
+    })
+    return unsubscribe
+  }, [chatRoomId])
 
   const startCall = useCallback(async () => {
     if (!webrtcManagerRef.current) return
@@ -153,22 +186,31 @@ export function useVideoCall(chatRoomId: string, userId: string, remoteUserId: s
   }, [])
 
   // Chat-related functions
-  const sendMessage = useCallback(() => {
-    if (!messageText.trim()) return
+  const sendMessage = useCallback(async () => {
+    if (!messageText.trim() || !chatRoomId || !userId) return
 
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      text: messageText.trim(),
-      senderId: userId,
-      timestamp: new Date()
-    }
-
-    setMessages(prev => [...prev, newMessage])
+    const text = messageText.trim()
     setMessageText("")
-  }, [messageText, userId])
+
+    try {
+      await sendMessageClient(chatRoomId, userId, "User", text, "text")
+    } catch (err) {
+      console.error("Error sending in-call message:", err)
+      // Fallback local append if offline
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          text,
+          senderId: userId,
+          timestamp: new Date(),
+        },
+      ])
+    }
+  }, [messageText, chatRoomId, userId])
 
   const toggleChat = useCallback(() => {
-    setShowChat(prev => !prev)
+    setShowChat((prev) => !prev)
   }, [])
 
   return {

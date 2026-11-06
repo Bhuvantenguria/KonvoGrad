@@ -18,14 +18,14 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0
 export const db = getFirestore(app)
 export const auth = getAuth(app)
 
-// Connect to emulators in development
-if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
+// Connect to emulators in development if explicitly enabled
+if (process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === "true" && typeof window !== "undefined") {
   try {
     // Only connect if not already connected
-    if (!auth.config.emulator) {
+    if (!(auth as any).config?.emulator) {
       connectAuthEmulator(auth, "http://localhost:9099")
     }
-    if (!(db as any)._delegate._databaseId.projectId.includes("demo-")) {
+    if (!(db as any)._delegate?._databaseId?.projectId?.includes("demo-")) {
       connectFirestoreEmulator(db, "localhost", 8080)
     }
   } catch (error) {

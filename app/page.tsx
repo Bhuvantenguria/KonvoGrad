@@ -99,7 +99,7 @@ export default function HomePage() {
                 </div>
                 <CardTitle className="text-xl">Professional Verification</CardTitle>
                 <CardDescription>
-                  LinkedIn integration ensures you're connecting with real, verified professionals.
+                  Optional LinkedIn integration allows members to showcase a verified checkmark badge to build trust.
                 </CardDescription>
               </CardHeader>
             </Card>

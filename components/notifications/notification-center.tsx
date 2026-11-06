@@ -146,7 +146,8 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
                     checked={settings?.quietHours?.enabled || false}
                     onCheckedChange={(checked) => updateSettings({ 
                       quietHours: { 
-                        ...settings?.quietHours, 
+                        start: settings?.quietHours?.start || "22:00",
+                        end: settings?.quietHours?.end || "08:00",
                         enabled: checked 
                       } 
                     })}

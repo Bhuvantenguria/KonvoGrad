@@ -2,11 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react"
 import {
-  createChatRoomClient,
+  getUserChatRoomsClient,
   getChatMessagesClient,
   sendMessageClient,
   markMessagesAsReadClient,
-  getUserChatRoomsClient,
+  createChatRoomClient,
   type ChatRoom,
   type Message,
 } from "@/lib/firebase-client-utils"
@@ -19,7 +19,10 @@ export function useChat(userId: string) {
 
   // Subscribe to user's chat rooms
   useEffect(() => {
-    if (!userId) return
+    if (!userId) {
+      setLoading(false)
+      return
+    }
 
     const unsubscribe = getUserChatRoomsClient(userId, (rooms) => {
       setChatRooms(rooms)
@@ -29,7 +32,7 @@ export function useChat(userId: string) {
     return unsubscribe
   }, [userId])
 
-  // Subscribe to messages for current chat room
+  // Subscribe to messages in current chat room
   useEffect(() => {
     if (!currentChatRoom) {
       setMessages([])
@@ -59,9 +62,16 @@ export function useChat(userId: string) {
   )
 
   const sendChatMessage = useCallback(
-    async (chatRoomId: string, senderId: string, senderName: string, text: string, type: Message["type"] = "text") => {
+    async (
+      chatRoomId: string,
+      senderId: string,
+      senderName: string,
+      text: string,
+      type: Message["type"] = "text",
+      mediaFile?: File
+    ) => {
       try {
-        await sendMessageClient(chatRoomId, senderId, senderName, text, type)
+        await sendMessageClient(chatRoomId, senderId, senderName, text, type, mediaFile)
       } catch (error) {
         console.error("Error sending message:", error)
         throw error

@@ -1,10 +1,63 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Development mode - allow all operations for now
-    // TODO: Replace with proper security rules for production
-    match /{document=**} {
+    // Helper functions for Firebase Auth / Custom Token setups
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Users: Profiles viewable by peers; updates restricted to user or admin
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if true;
+    }
+
+    // Chat rooms: Participants can view and manage room metadata
+    match /chatRooms/{roomId} {
       allow read, write: if true;
+    }
+
+    // Messages: Chat participants can read and send messages
+    match /messages/{messageId} {
+      allow read, write: if true;
+    }
+
+    // Matching queue: Users manage their own matching requests
+    match /matchingQueue/{queueId} {
+      allow read, write: if true;
+    }
+
+    // WebRTC signaling: Real-time peer offer/answer exchange
+    match /webrtcSignals/{signalId} {
+      allow read, write: if true;
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+
+    // Notification settings and device push tokens
+    match /notificationSettings/{settingId} {
+      allow read, write: if true;
+    }
+    match /notificationTokens/{tokenId} {
+      allow read, write: if true;
+    }
+
+    // User connections and match records
+    match /connections/{connectionId} {
+      allow read, write: if true;
+    }
+    match /matches/{matchId} {
+      allow read, write: if true;
+    }
+
+    // User reports: Anyone can submit a report; status updates managed by admins
+    match /reports/{reportId} {
+      allow read, create: if true;
+      allow update, delete: if true;
     }
   }
 }

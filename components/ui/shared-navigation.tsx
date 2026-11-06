@@ -5,6 +5,7 @@ import { useFirebaseUser } from "@/hooks/use-firebase-user"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { NotificationCenter } from "@/components/notifications/notification-center"
 import { 
   Users, 
   MessageCircle, 
@@ -47,6 +48,10 @@ export function SharedNavigation({
   const { theme, setTheme, isDarkMode, setIsDarkMode, currentTheme } = useTheme()
   const [showThemeMenu, setShowThemeMenu] = useState(false)
   const [showUserDropdown, setShowUserDropdown] = useState(false)
+
+  const isAdmin = (user?.publicMetadata as any)?.role === "admin" || 
+    (user?.emailAddresses[0]?.emailAddress && user.emailAddresses[0].emailAddress.includes("admin")) || 
+    firebaseUser?.role === "admin"
 
   const navigationItems = [
     { href: "/dashboard", label: "Dashboard", icon: Users, active: currentPage === "dashboard" },
@@ -96,6 +101,24 @@ export function SharedNavigation({
                     </Button>
                   )
                 })}
+
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                      "font-medium transition-all duration-300 hover:scale-105",
+                      currentPage === "admin"
+                        ? `bg-gradient-to-r ${currentTheme.secondary} text-white shadow-lg`
+                        : "hover:bg-muted/50 text-foreground"
+                    )}
+                    asChild
+                  >
+                    <Link href="/admin">
+                      <Shield className="w-4 h-4 mr-2" />
+                      Admin
+                    </Link>
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -111,11 +134,8 @@ export function SharedNavigation({
             )}
 
             {/* Notifications */}
-            {showNotifications && (
-              <Button variant="ghost" size="icon" className="relative hover:scale-110 transition-transform duration-300">
-                <Bell className="w-5 h-5" />
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-              </Button>
+            {showNotifications && firebaseUser?.id && (
+              <NotificationCenter userId={firebaseUser.id} />
             )}
 
             {/* Theme Toggle */}
@@ -150,38 +170,40 @@ export function SharedNavigation({
 
                       <div className="border-t border-border/20 my-2"></div>
 
-                                              {/* Theme Selection */}
-                        <div className="space-y-2">
-                          <p className="text-xs text-muted-foreground px-2 font-medium">Choose Theme</p>
-                          {Object.entries(themes).map(([key, themeConfig]) => (
-                            <Button
-                              key={key}
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setTheme(key as keyof typeof themes)
-                                setShowThemeMenu(false)
-                              }}
-                              className={cn(
-                                "w-full justify-start hover:bg-muted/50 transition-all duration-200",
-                                theme === key && "bg-muted/50 border-l-2 border-primary"
-                              )}
-                            >
-                              <div className={`w-4 h-4 rounded bg-gradient-to-r ${themeConfig.primary} mr-2`}></div>
-                              {themeConfig.name}
-                              {theme === key && <Star className="w-3 h-3 ml-auto text-primary" />}
-                            </Button>
-                          ))}
-                        </div>
+                      {/* Theme Selection */}
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground px-2 font-medium">Choose Theme</p>
+                        {Object.entries(themes).map(([key, themeConfig]) => (
+                          <Button
+                            key={key}
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setTheme(key as keyof typeof themes)
+                              setShowThemeMenu(false)
+                            }}
+                            className={cn(
+                              "w-full justify-start hover:bg-muted/50 transition-all duration-200",
+                              theme === key && "bg-muted/50 border-l-2 border-primary"
+                            )}
+                          >
+                            <div className={`w-4 h-4 rounded bg-gradient-to-r ${themeConfig.primary} mr-2`}></div>
+                            {themeConfig.name}
+                            {theme === key && <Star className="w-3 h-3 ml-auto text-primary" />}
+                          </Button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Settings */}
-            <Button variant="ghost" size="icon" className="hover:scale-110 transition-transform duration-300">
-              <Settings className="w-5 h-5" />
+            {/* Settings Link */}
+            <Button variant="ghost" size="icon" className="hover:scale-110 transition-transform duration-300" asChild>
+              <Link href="/onboarding">
+                <Settings className="w-5 h-5" />
+              </Link>
             </Button>
 
             {/* User Menu */}
@@ -208,20 +230,22 @@ export function SharedNavigation({
                           <p className="text-sm text-muted-foreground">{user.emailAddresses[0]?.emailAddress}</p>
                         </div>
                         
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50"
-                        >
-                          <LogOut className="w-4 h-4 mr-2" />
-                          Sign Out
-                        </Button>
+                        <SignOutButton>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50"
+                          >
+                            <LogOut className="w-4 h-4 mr-2" />
+                            Sign Out
+                          </Button>
+                        </SignOutButton>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Logout Button */}
+                {/* Direct Logout Button */}
                 <SignOutButton>
                   <Button 
                     variant="ghost" 

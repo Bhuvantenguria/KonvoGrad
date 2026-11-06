@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { MessageCircle, Users, Video, Settings, Zap, UserPlus, Copy, RefreshCw, Loader2, Sparkles, TrendingUp, Award, Heart, Star, Crown, Shield } from "lucide-react"
+import { MessageCircle, Users, Video, Settings, Zap, UserPlus, Copy, RefreshCw, Loader2, Sparkles, TrendingUp, Award, Heart, Star, Crown, Shield, CheckCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { NotificationCenter } from "@/components/notifications/notification-center"
 import { SharedNavigation } from "@/components/ui/shared-navigation"
@@ -67,7 +67,15 @@ export default function DashboardPage() {
                   <Sparkles className="w-8 h-8 text-white" />
                 </div>
                 <div>
-                  <h1 className="font-bold text-3xl text-foreground">Welcome back, {user?.firstName}!</h1>
+                  <div className="flex items-center space-x-2">
+                    <h1 className="font-bold text-3xl text-foreground">Welcome back, {user?.firstName}!</h1>
+                    {firebaseUser?.isVerified && (
+                      <Badge className="bg-blue-500/20 text-blue-600 border border-blue-500/30 text-xs">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Verified
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-muted-foreground">Ready to connect with professionals and expand your network?</p>
                 </div>
               </div>
@@ -116,9 +124,15 @@ export default function DashboardPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Button variant="outline" className={`w-full border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground font-semibold btn-animate`}>
-                    <Video className="w-4 h-4 mr-2" />
-                    Start Video
+                  <Button
+                    variant="outline"
+                    className={`w-full border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground font-semibold btn-animate`}
+                    asChild
+                  >
+                    <Link href="/match">
+                      <Video className="w-4 h-4 mr-2" />
+                      Start Video
+                    </Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -152,43 +166,48 @@ export default function DashboardPage() {
                   </div>
                 ) : chatRooms.length > 0 ? (
                   <div className="space-y-4">
-                    {chatRooms.slice(0, 3).map((room, index) => (
-                      <div
-                        key={room.id}
-                        className={`flex items-center justify-between p-4 border-2 border-border/20 rounded-xl ${isDarkMode ? 'bg-slate-800/50' : 'bg-white/50'} backdrop-blur-sm hover:scale-105 transition-all duration-300`}
-                        style={{ animationDelay: `${index * 100}ms` }}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <Avatar className="w-12 h-12 border-2 border-border/20 hover:scale-110 transition-transform duration-300">
-                            <AvatarFallback className="bg-gradient-to-r from-white to-gray-200 font-bold">
-                              {Object.values(room.participantDetails)[0]?.name?.[0] || "U"}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium text-foreground">
-                              {Object.values(room.participantDetails)[0]?.name || "Unknown User"}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {Object.values(room.participantDetails)[0]?.role || "Professional"}
-                            </p>
-                            {room.lastMessage && (
-                              <p className="text-xs text-muted-foreground truncate max-w-48">{room.lastMessage.text}</p>
-                            )}
+                    {chatRooms.slice(0, 3).map((room, index) => {
+                      const otherUserId = room.participants.find((id) => id !== firebaseUser?.id)
+                      const otherParticipant = otherUserId ? room.participantDetails?.[otherUserId] : Object.values(room.participantDetails)[0]
+                      const displayName = otherParticipant?.name || "Professional"
+
+                      return (
+                        <div
+                          key={room.id}
+                          className={`flex items-center justify-between p-4 border-2 border-border/20 rounded-xl ${isDarkMode ? 'bg-slate-800/50' : 'bg-white/50'} backdrop-blur-sm hover:scale-105 transition-all duration-300`}
+                          style={{ animationDelay: `${index * 100}ms` }}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <Avatar className="w-12 h-12 border-2 border-border/20 hover:scale-110 transition-transform duration-300">
+                              <AvatarImage src={otherParticipant?.imageUrl || "/placeholder.svg"} />
+                              <AvatarFallback className="bg-gradient-to-r from-white to-gray-200 font-bold">
+                                {displayName[0] || "U"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium text-foreground">{displayName}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {otherParticipant?.role || "Professional"}
+                              </p>
+                              {room.lastMessage && (
+                                <p className="text-xs text-muted-foreground truncate max-w-48">{room.lastMessage.text}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Badge className={room.isActive ? "bg-green-500/20 text-green-600 border border-green-500/30" : "bg-muted/50 text-muted-foreground"}>
+                              {room.isActive ? "Active" : "Inactive"}
+                            </Badge>
+                            <Button size="sm" variant="outline" className={`border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`} asChild>
+                              <Link href="/chat">
+                                <MessageCircle className="w-4 h-4 mr-1" />
+                                Chat
+                              </Link>
+                            </Button>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <Badge className={room.isActive ? "bg-green-500/20 text-green-600 border border-green-500/30" : "bg-muted/50 text-muted-foreground"}>
-                            {room.isActive ? "Active" : "Inactive"}
-                          </Badge>
-                          <Button size="sm" variant="outline" className={`border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`} asChild>
-                            <Link href="/chat">
-                              <MessageCircle className="w-4 h-4 mr-1" />
-                              Chat
-                            </Link>
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-8">
@@ -230,7 +249,12 @@ export default function DashboardPage() {
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium text-foreground">{user?.fullName}</p>
+                    <div className="flex items-center space-x-1.5">
+                      <p className="font-medium text-foreground">{user?.fullName}</p>
+                      {firebaseUser?.isVerified && (
+                        <CheckCircle className="w-4 h-4 text-blue-500 shrink-0" />
+                      )}
+                    </div>
                     <p className="text-sm text-muted-foreground">{firebaseUser?.role || "Professional"}</p>
                   </div>
                 </div>
@@ -266,9 +290,16 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                <Button variant="outline" className={`w-full border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`} size="sm">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Edit Profile
+                <Button
+                  variant="outline"
+                  className={`w-full border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground btn-animate`}
+                  size="sm"
+                  asChild
+                >
+                  <Link href="/onboarding">
+                    <Settings className="w-4 h-4 mr-2" />
+                    Edit Profile
+                  </Link>
                 </Button>
               </CardContent>
             </Card>

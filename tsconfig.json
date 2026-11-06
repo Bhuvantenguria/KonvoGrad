@@ -19,7 +19,11 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "firebase/app": ["./node_modules/@firebase/app/dist/app-public.d.ts"],
+      "firebase/firestore": ["./node_modules/@firebase/firestore/dist/firestore/src/api.d.ts"],
+      "firebase/auth": ["./node_modules/@firebase/auth/dist/auth-public.d.ts"],
+      "firebase/messaging": ["./node_modules/@firebase/messaging/dist/index-public.d.ts"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

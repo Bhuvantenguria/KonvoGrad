@@ -2,82 +2,54 @@
 importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js")
 importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js")
 
-// Declare the firebase variable
 const firebase = self.firebase
 
-// Initialize Firebase in service worker
-firebase.initializeApp({
-  apiKey: "your-api-key", // This will be replaced with actual values
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "your-sender-id",
-  appId: "your-app-id",
-})
+// Parse configuration from registration URL query parameters or fallback
+const params = new URL(location).searchParams
+const config = {
+  apiKey: params.get("apiKey") || "",
+  authDomain: params.get("authDomain") || "",
+  projectId: params.get("projectId") || "",
+  storageBucket: params.get("storageBucket") || "",
+  messagingSenderId: params.get("messagingSenderId") || "",
+  appId: params.get("appId") || "",
+}
 
-const messaging = firebase.messaging()
-
-// Handle background messages
-messaging.onBackgroundMessage((payload) => {
-  console.log("Background message received:", payload)
-
-  const notificationTitle = payload.notification?.title || "KonvoGrad"
-  const notificationOptions = {
-    body: payload.notification?.body || "You have a new notification",
-    icon: "/icon-192x192.png",
-    badge: "/badge-72x72.png",
-    tag: payload.data?.type || "general",
-    data: payload.data,
-    actions: [
-      {
-        action: "open",
-        title: "Open",
-      },
-      {
-        action: "dismiss",
-        title: "Dismiss",
-      },
-    ],
+try {
+  if (config.apiKey) {
+    firebase.initializeApp(config)
+    const messaging = firebase.messaging()
+    messaging.onBackgroundMessage((payload) => {
+      const notificationTitle = payload.notification?.title || "KonvoGrad"
+      const notificationOptions = {
+        body: payload.notification?.body || "You have a new notification",
+        icon: "/placeholder.svg",
+        data: payload.data,
+      }
+      self.registration.showNotification(notificationTitle, notificationOptions)
+    })
   }
-
-  self.registration.showNotification(notificationTitle, notificationOptions)
-})
+} catch (e) {
+  console.warn("FCM Service Worker initialization skipped:", e)
+}
 
 // Handle notification clicks
 self.addEventListener("notificationclick", (event) => {
-  console.log("Notification clicked:", event)
-
   event.notification.close()
 
-  if (event.action === "dismiss") {
-    return
-  }
-
-  // Handle different notification types
-  const data = event.notification.data
-  let url = "/"
-
-  if (data?.chatRoomId) {
-    url = `/chat?room=${data.chatRoomId}`
-  } else if (data?.type === "match") {
-    url = "/match"
-  } else if (data?.type === "connection") {
-    url = "/dashboard"
-  }
+  const chatRoomId = event.notification.data?.chatRoomId
+  const urlToOpen = chatRoomId ? `/chat` : `/dashboard`
 
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      // Check if there's already a window/tab open with the target URL
+    clients.matchAll({ type: "window" }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url.includes(url) && "focus" in client) {
+        if (client.url.includes(urlToOpen) && "focus" in client) {
           return client.focus()
         }
       }
-
-      // If no existing window/tab, open a new one
       if (clients.openWindow) {
-        return clients.openWindow(url)
+        return clients.openWindow(urlToOpen)
       }
-    }),
+    })
   )
 })

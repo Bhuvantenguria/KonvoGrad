@@ -45,6 +45,8 @@ export function FloatingActionButton({
       className="fixed bottom-6 right-6 z-50"
       initial={{ scale: 0, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.95 }}
       transition={{ duration: 0.3, type: "spring" }}
     >
       <Button
@@ -55,8 +57,6 @@ export function FloatingActionButton({
           variantClasses[variant],
           className
         )}
-        whileHover={{ y: -2 }}
-        whileTap={{ scale: 0.95 }}
       >
         <Icon className={iconSizes[size]} />
         {label && (
@@ -86,7 +86,7 @@ export function FloatingActionMenu({
       className={cn("fixed bottom-6 right-6 z-50 flex flex-col items-end space-y-3", className)}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, staggerChildren: 0.1 }}
+      transition={{ duration: 0.3 }}
     >
       {children}
     </motion.div>

@@ -24,17 +24,46 @@ import {
   Shield,
   Settings,
   Play,
-  Pause,
   RotateCcw
 } from "lucide-react"
 
 export default function MatchPage() {
   const { user } = useUser()
   const { firebaseUser } = useFirebaseUser()
-  const { isMatching, startMatching, stopMatching, currentMatch } = useMatching()
+
+  const userDetails = firebaseUser
+    ? {
+        name: `Session ${firebaseUser.sessionId?.slice(-6) || firebaseUser.id?.slice(-6) || "Unknown"}`,
+        role: firebaseUser.role,
+        imageUrl: firebaseUser.imageUrl,
+        skills: firebaseUser.skills,
+        company: firebaseUser.company,
+        sessionId: firebaseUser.sessionId,
+      }
+    : null
+
+  const {
+    isSearching: isMatching,
+    matchingStatus,
+    matchFound,
+    startMatching,
+    stopMatching,
+    resetMatch,
+  } = useMatching(firebaseUser?.id || "", userDetails || ({} as any))
+
   const { toast } = useToast()
   const { currentTheme, isDarkMode } = useTheme()
   const [textOnlyMode, setTextOnlyMode] = useState(false)
+
+  const currentMatch = matchFound
+    ? {
+        chatRoomId: matchFound,
+        name: "Matched Professional",
+        role: "Professional",
+        avatar: "",
+        sessionId: matchFound.slice(-6),
+      }
+    : null
 
   if (!firebaseUser) {
     return (
@@ -210,7 +239,7 @@ export default function MatchPage() {
                         <p className="text-muted-foreground">{currentMatch.role}</p>
                         <Badge className={`mt-1 bg-gradient-to-r ${currentTheme.primary} text-white`}>
                           <Shield className="w-3 h-3 mr-1" />
-                          Session {currentMatch.sessionId?.slice(-6) || "Unknown"}
+                          Session {currentMatch.sessionId || "Unknown"}
                         </Badge>
                       </div>
                     </div>
@@ -220,10 +249,8 @@ export default function MatchPage() {
                         className={`flex-1 bg-gradient-to-r ${currentTheme.primary} text-white hover:scale-105 transition-transform duration-200`}
                         onClick={() => {
                           if (textOnlyMode) {
-                            // Navigate to chat
                             window.location.href = `/chat`
                           } else {
-                            // Navigate to video chat
                             window.location.href = `/video-chat/${currentMatch.chatRoomId}`
                           }
                         }}
@@ -235,7 +262,10 @@ export default function MatchPage() {
                       <Button 
                         variant="outline" 
                         className={`border-2 border-border/20 ${isDarkMode ? 'bg-slate-700/10 hover:bg-slate-700/20' : 'bg-white/10 hover:bg-white/20'} text-foreground hover:scale-105 transition-transform duration-200`}
-                        onClick={stopMatching}
+                        onClick={() => {
+                          resetMatch()
+                          startMatching()
+                        }}
                       >
                         <RotateCcw className="w-4 h-4 mr-2" />
                         Next
@@ -251,7 +281,7 @@ export default function MatchPage() {
                     <p className="text-muted-foreground mb-4">Start matching to find your next connection</p>
                     <Button 
                       className={`bg-gradient-to-r ${currentTheme.primary} text-white hover:scale-105 transition-transform duration-200`}
-                      onClick={startMatching}
+                      onClick={() => startMatching()}
                     >
                       <Play className="w-4 h-4 mr-2" />
                       Start Matching
@@ -269,29 +299,38 @@ export default function MatchPage() {
                     <Star className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <CardTitle className="text-xl text-foreground">Pro Tips</CardTitle>
-                    <CardDescription className="text-muted-foreground">Make the most of your connections</CardDescription>
+                    <CardTitle className="text-xl text-foreground">Matching Tips</CardTitle>
+                    <CardDescription className="text-muted-foreground">Get the most out of your connections</CardDescription>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-4">
                 <div className="flex items-start space-x-3">
-                  <div className={`w-6 h-6 bg-gradient-to-r ${currentTheme.primary} rounded-full flex items-center justify-center mt-0.5`}>
-                    <span className="text-white text-xs font-bold">1</span>
+                  <div className={`w-6 h-6 bg-gradient-to-r ${currentTheme.primary} rounded-full flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                    <span className="text-xs text-white font-bold">1</span>
                   </div>
-                  <p className="text-sm text-foreground">Be professional and respectful in your conversations</p>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Be respectful and professional</p>
+                    <p className="text-xs text-muted-foreground">Maintain high standards in every conversation</p>
+                  </div>
                 </div>
                 <div className="flex items-start space-x-3">
-                  <div className={`w-6 h-6 bg-gradient-to-r ${currentTheme.secondary} rounded-full flex items-center justify-center mt-0.5`}>
-                    <span className="text-white text-xs font-bold">2</span>
+                  <div className={`w-6 h-6 bg-gradient-to-r ${currentTheme.secondary} rounded-full flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                    <span className="text-xs text-white font-bold">2</span>
                   </div>
-                  <p className="text-sm text-foreground">Share your expertise and learn from others</p>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Keep sessions focused</p>
+                    <p className="text-xs text-muted-foreground">Focus on mutual learning and networking</p>
+                  </div>
                 </div>
                 <div className="flex items-start space-x-3">
-                  <div className={`w-6 h-6 bg-gradient-to-r ${currentTheme.accent} rounded-full flex items-center justify-center mt-0.5`}>
-                    <span className="text-white text-xs font-bold">3</span>
+                  <div className={`w-6 h-6 bg-gradient-to-r ${currentTheme.accent} rounded-full flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                    <span className="text-xs text-white font-bold">3</span>
                   </div>
-                  <p className="text-sm text-foreground">Use the chat feature to exchange contact information</p>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Exchange contact info</p>
+                    <p className="text-xs text-muted-foreground">Connect on LinkedIn if the conversation goes well</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>

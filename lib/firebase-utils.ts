@@ -3,6 +3,7 @@ import {
   doc,
   addDoc,
   updateDoc,
+  deleteField,
   getDoc,
   getDocs,
   query,
@@ -13,10 +14,10 @@ import {
   serverTimestamp,
   type Timestamp,
   type QueryDocumentSnapshot,
+  type QuerySnapshot,
 } from "firebase/firestore"
 import { db } from "./firebase"
 import { uploadImage, uploadFile } from "./cloudinary"
-// Server-side authentication removed to fix client component import issues
 
 // Types
 export interface User {
@@ -26,7 +27,7 @@ export interface User {
   firstName: string
   lastName: string
   imageUrl?: string
-  role: "alumni" | "developer" | "student" | "professional"
+  role: "alumni" | "developer" | "student" | "professional" | "admin"
   company?: string
   position?: string
   college?: string
@@ -102,6 +103,28 @@ export interface Match {
   updatedAt: Timestamp
 }
 
+export interface AdminStats {
+  totalUsers: number
+  activeUsers: number
+  totalChatRooms: number
+  activeChatRooms: number
+  totalMessages: number
+  totalMatches: number
+}
+
+export interface UserReport {
+  id: string
+  reportedUserId: string
+  reportedBy: string
+  reason: string
+  description: string
+  status: "pending" | "resolved" | "dismissed"
+  createdAt: any
+  updatedAt: any
+  resolvedBy?: string
+  resolvedAt?: any
+}
+
 // User operations
 export const createUser = async (userData: Omit<User, "id" | "createdAt" | "updatedAt">): Promise<string> => {
   try {
@@ -124,8 +147,8 @@ export const getUserByClerkId = async (clerkId: string): Promise<User | null> =>
 
     if (querySnapshot.empty) return null
 
-    const doc = querySnapshot.docs[0]
-    return { id: doc.id, ...doc.data() } as User
+    const userDoc = querySnapshot.docs[0]
+    return { id: userDoc.id, ...userDoc.data() } as User
   } catch (error) {
     console.error("Error getting user by clerk ID:", error)
     throw error
@@ -181,12 +204,84 @@ export const generateInviteCode = (): string => {
 }
 
 // Admin functions
+export const getAllUsers = async (limitCount = 200): Promise<User[]> => {
+  try {
+    const q = query(collection(db, "users"), limit(limitCount))
+    const snapshot = await getDocs(q)
+    const users: User[] = []
+    snapshot.forEach((d: QueryDocumentSnapshot) => {
+      users.push({ id: d.id, ...(d.data() as Omit<User, "id">) })
+    })
+    return users
+  } catch (error) {
+    console.error("Error getting all users:", error)
+    return []
+  }
+}
+
+export const getAdminStats = async (): Promise<AdminStats> => {
+  try {
+    const [usersSnap, chatRoomsSnap, messagesSnap, matchesSnap] = await Promise.all([
+      getDocs(collection(db, "users")),
+      getDocs(collection(db, "chatRooms")),
+      getDocs(collection(db, "messages")),
+      getDocs(collection(db, "matches")).catch(() => ({ size: 0 })),
+    ])
+
+    let activeUsers = 0
+    usersSnap.forEach((d: QueryDocumentSnapshot) => {
+      const data = d.data() as User
+      if (data.isOnline) activeUsers++
+    })
+
+    let activeChatRooms = 0
+    chatRoomsSnap.forEach((d: QueryDocumentSnapshot) => {
+      const data = d.data() as ChatRoom
+      if (data.isActive) activeChatRooms++
+    })
+
+    return {
+      totalUsers: usersSnap.size,
+      activeUsers,
+      totalChatRooms: chatRoomsSnap.size,
+      activeChatRooms,
+      totalMessages: messagesSnap.size,
+      totalMatches: (matchesSnap as any)?.size || 0,
+    }
+  } catch (error) {
+    console.error("Error getting admin stats:", error)
+    return {
+      totalUsers: 0,
+      activeUsers: 0,
+      totalChatRooms: 0,
+      activeChatRooms: 0,
+      totalMessages: 0,
+      totalMatches: 0,
+    }
+  }
+}
+
+export const getAllReports = async (): Promise<UserReport[]> => {
+  try {
+    const snapshot = await getDocs(collection(db, "reports"))
+    const reports: UserReport[] = []
+    snapshot.forEach((d: QueryDocumentSnapshot) => {
+      reports.push({ id: d.id, ...(d.data() as Omit<UserReport, "id">) })
+    })
+    return reports
+  } catch (error) {
+    console.error("Error getting all reports:", error)
+    return []
+  }
+}
+
 export const suspendUser = async (userId: string, reason: string, suspendedBy: string): Promise<void> => {
   try {
     await updateUser(userId, {
       suspensionReason: reason,
       suspendedBy,
       suspendedAt: serverTimestamp() as any,
+      isVerified: false,
     })
   } catch (error) {
     console.error("Error suspending user:", error)
@@ -196,12 +291,14 @@ export const suspendUser = async (userId: string, reason: string, suspendedBy: s
 
 export const unsuspendUser = async (userId: string, unsuspendedBy: string): Promise<void> => {
   try {
-    await updateUser(userId, {
-      suspensionReason: undefined,
-      suspendedBy: undefined,
-      suspendedAt: undefined,
+    const docRef = doc(db, "users", userId)
+    await updateDoc(docRef, {
+      suspensionReason: deleteField(),
+      suspendedBy: deleteField(),
+      suspendedAt: deleteField(),
       unsuspendedBy,
       unsuspendedAt: serverTimestamp() as any,
+      isVerified: true,
     })
   } catch (error) {
     console.error("Error unsuspending user:", error)
@@ -209,11 +306,12 @@ export const unsuspendUser = async (userId: string, unsuspendedBy: string): Prom
   }
 }
 
-export const updateReportStatus = async (reportId: string, status: string): Promise<void> => {
+export const updateReportStatus = async (reportId: string, status: string, updatedBy?: string): Promise<void> => {
   try {
     const docRef = doc(db, "reports", reportId)
     await updateDoc(docRef, {
       status,
+      updatedBy: updatedBy || null,
       updatedAt: serverTimestamp(),
     })
   } catch (error) {
@@ -231,7 +329,7 @@ export const joinMatchingQueue = async (userId: string, userPreferences: any): P
       preferences: userPreferences,
       joinedAt: serverTimestamp(),
       isActive: true,
-    }, { upsert: true })
+    })
   } catch (error) {
     console.error("Error joining matching queue:", error)
     throw error
@@ -262,10 +360,9 @@ export const findRandomMatch = async (userId: string, preferences: any): Promise
     
     if (querySnapshot.empty) return null
     
-    // Simple random selection - can be improved with preference matching
     const availableUsers = querySnapshot.docs
-      .map(doc => ({ id: doc.id, ...doc.data() }))
-      .filter(user => user.isActive && user.userId !== userId)
+      .map((d: QueryDocumentSnapshot) => ({ id: d.id, ...d.data() }))
+      .filter((user: any) => user.isActive && user.userId !== userId)
     
     if (availableUsers.length === 0) return null
     
@@ -284,7 +381,6 @@ export const createMatchAndChatRoom = async (
   user2Details: any
 ): Promise<string> => {
   try {
-    // Create chat room
     const participantDetails = {
       [userId1]: {
         name: user1Details.name,
@@ -302,7 +398,6 @@ export const createMatchAndChatRoom = async (
     
     const chatRoomId = await createChatRoom("direct", [userId1, userId2], participantDetails)
     
-    // Remove both users from matching queue
     await leaveMatchingQueue(userId1)
     await leaveMatchingQueue(userId2)
     
@@ -358,10 +453,10 @@ export const getUserChatRooms = (userId: string, callback: (chatRooms: ChatRoom[
     orderBy("updatedAt", "desc")
   )
 
-  return onSnapshot(q, (querySnapshot) => {
+  return onSnapshot(q, (querySnapshot: QuerySnapshot) => {
     const chatRooms: ChatRoom[] = []
-    querySnapshot.forEach((doc) => {
-      chatRooms.push({ id: doc.id, ...doc.data() } as ChatRoom)
+    querySnapshot.forEach((d: QueryDocumentSnapshot) => {
+      chatRooms.push({ id: d.id, ...d.data() } as ChatRoom)
     })
     callback(chatRooms)
   })
@@ -394,7 +489,6 @@ export const sendMessage = async (
     let fileName: string | undefined
     let fileSize: number | undefined
 
-    // Handle file uploads to Cloudinary
     if (file && type !== "text") {
       if (type === "image") {
         mediaUrl = await uploadImage(file, "chat-images")
@@ -405,7 +499,6 @@ export const sendMessage = async (
       }
     }
 
-    // Add message to messages collection
     const messageRef = await addDoc(collection(db, "messages"), {
       chatRoomId,
       senderId,
@@ -420,7 +513,6 @@ export const sendMessage = async (
       readBy: [senderId],
     })
 
-    // Update chat room with last message
     await updateDoc(doc(db, "chatRooms", chatRoomId), {
       lastMessage: {
         text,
@@ -433,10 +525,7 @@ export const sendMessage = async (
     const chatRoom = await getChatRoom(chatRoomId)
     if (chatRoom) {
       const otherParticipants = chatRoom.participants.filter((id) => id !== senderId)
-
-      // Import notification function dynamically to avoid circular imports
       const { notifyNewMessage } = await import("./notifications")
-
       for (const participantId of otherParticipants) {
         await notifyNewMessage(participantId, senderName, chatRoomId)
       }
@@ -457,13 +546,12 @@ export const getChatMessages = (chatRoomId: string, callback: (messages: Message
     limit(limitCount)
   )
 
-  return onSnapshot(q, (querySnapshot) => {
+  return onSnapshot(q, (querySnapshot: QuerySnapshot) => {
     const messages: Message[] = []
-    querySnapshot.forEach((doc) => {
-      messages.push({ id: doc.id, ...doc.data() } as Message)
+    querySnapshot.forEach((d: QueryDocumentSnapshot) => {
+      messages.push({ id: d.id, ...d.data() } as Message)
     })
-    // Sort by timestamp ascending for display
-    messages.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis())
+    messages.sort((a, b) => a.timestamp?.toMillis?.() - b.timestamp?.toMillis?.())
     callback(messages)
   })
 }
@@ -473,20 +561,21 @@ export const markMessagesAsRead = async (chatRoomId: string, userId: string): Pr
     const q = query(
       collection(db, "messages"),
       where("chatRoomId", "==", chatRoomId),
-      where("senderId", "!=", userId),
       where("isRead", "==", false)
     )
 
     const querySnapshot = await getDocs(q)
-    const updatePromises = querySnapshot.docs.map((doc) => {
-      const messageData = doc.data()
-      const readBy = messageData.readBy || []
-      if (!readBy.includes(userId)) {
-        readBy.push(userId)
-        return updateDoc(doc.ref, {
-          isRead: true,
-          readBy,
-        })
+    const updatePromises = querySnapshot.docs.map((d: QueryDocumentSnapshot) => {
+      const messageData = d.data() as Message
+      if (messageData.senderId !== userId) {
+        const readBy = messageData.readBy || []
+        if (!readBy.includes(userId)) {
+          readBy.push(userId)
+          return updateDoc(d.ref, {
+            isRead: true,
+            readBy,
+          })
+        }
       }
       return Promise.resolve()
     })
@@ -537,16 +626,31 @@ export const updateConnectionStatus = async (
 
 export const getUserConnections = async (userId: string): Promise<Connection[]> => {
   try {
-    const q = query(
+    const q1 = query(
       collection(db, "connections"),
       where("userId1", "==", userId),
       where("status", "==", "accepted")
     )
-    const querySnapshot = await getDocs(q)
+    const q2 = query(
+      collection(db, "connections"),
+      where("userId2", "==", userId),
+      where("status", "==", "accepted")
+    )
+    const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)])
 
     const connections: Connection[] = []
-    querySnapshot.forEach((doc) => {
-      connections.push({ id: doc.id, ...doc.data() } as Connection)
+    const seen = new Set<string>()
+
+    snap1.forEach((d: QueryDocumentSnapshot) => {
+      seen.add(d.id)
+      connections.push({ id: d.id, ...d.data() } as Connection)
+    })
+
+    snap2.forEach((d: QueryDocumentSnapshot) => {
+      if (!seen.has(d.id)) {
+        seen.add(d.id)
+        connections.push({ id: d.id, ...d.data() } as Connection)
+      }
     })
 
     return connections
@@ -600,22 +704,20 @@ export const searchUsers = async (
   limitCount = 20
 ): Promise<User[]> => {
   try {
-    // Search by name, skills, or company
     const q = query(
       collection(db, "users"),
-      where("isVerified", "==", true),
       limit(limitCount)
     )
 
     const querySnapshot = await getDocs(q)
     const users: User[] = []
     
-    querySnapshot.forEach((doc: QueryDocumentSnapshot) => {
-      const userData = doc.data() as User
-      if (doc.id !== currentUserId) {
-        const searchableText = `${userData.firstName} ${userData.lastName} ${userData.skills.join(" ")} ${userData.company || ""}`.toLowerCase()
+    querySnapshot.forEach((d: QueryDocumentSnapshot) => {
+      const userData = d.data() as User
+      if (d.id !== currentUserId) {
+        const searchableText = `${userData.firstName || ""} ${userData.lastName || ""} ${(userData.skills || []).join(" ")} ${userData.company || ""}`.toLowerCase()
         if (searchableText.includes(searchTerm.toLowerCase())) {
-          users.push({ ...userData, id: doc.id })
+          users.push({ ...userData, id: d.id })
         }
       }
     })
@@ -630,7 +732,7 @@ export const searchUsers = async (
 // Utility functions
 export const formatTimestamp = (timestamp: Timestamp): string => {
   if (!timestamp) return ""
-  const date = timestamp.toDate()
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
   const now = new Date()
   const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
   

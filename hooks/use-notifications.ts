@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { collection, query, where, orderBy, onSnapshot, limit } from "firebase/firestore"
+import { collection, query, where, orderBy, onSnapshot, limit, QuerySnapshot, DocumentData, QueryDocumentSnapshot } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import {
   requestNotificationPermission,
@@ -58,10 +58,10 @@ export const useNotifications = (userId: string) => {
       limit(50),
     )
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    const unsubscribe = onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
       const notificationList: NotificationData[] = []
-      querySnapshot.forEach((doc) => {
-        notificationList.push({ id: doc.id, ...doc.data() } as NotificationData)
+      querySnapshot.forEach((docSnap: QueryDocumentSnapshot<DocumentData>) => {
+        notificationList.push({ id: docSnap.id, ...docSnap.data() } as NotificationData)
       })
       setNotifications(notificationList)
     })
@@ -71,16 +71,25 @@ export const useNotifications = (userId: string) => {
 
   // Listen for foreground messages
   useEffect(() => {
-    const onForegroundMessage = getForegroundMessageHandler()
-    const unsubscribe = onForegroundMessage((payload) => {
-      // Show toast notification for foreground messages
-      toast({
-        title: payload.notification?.title || "New Notification",
-        description: payload.notification?.body || "You have a new notification",
+    let unsubscribePromise: Promise<any> | null = null
+    const handler = getForegroundMessageHandler()
+    if (typeof window !== "undefined") {
+      unsubscribePromise = handler((payload: any) => {
+        // Show toast notification for foreground messages
+        toast({
+          title: payload.notification?.title || "New Notification",
+          description: payload.notification?.body || "You have a new notification",
+        })
       })
-    })
+    }
 
-    return unsubscribe
+    return () => {
+      if (unsubscribePromise) {
+        unsubscribePromise.then((unsub) => {
+          if (typeof unsub === "function") unsub()
+        })
+      }
+    }
   }, [toast])
 
   const markAsRead = async (notificationId: string) => {

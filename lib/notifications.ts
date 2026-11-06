@@ -19,6 +19,7 @@ export interface NotificationData {
 }
 
 export interface NotificationSettings {
+  id?: string
   userId: string
   enablePush: boolean
   enableEmail: boolean
@@ -34,7 +35,7 @@ export interface NotificationSettings {
 export async function requestNotificationPermission(userId: string): Promise<string | null> {
   try {
     // Check if notifications are supported
-    if (!("Notification" in window)) {
+    if (typeof window === "undefined" || !("Notification" in window)) {
       return null;
     }
 

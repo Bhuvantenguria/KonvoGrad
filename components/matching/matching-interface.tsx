@@ -73,17 +73,27 @@ const themes = {
   }
 }
 
-interface MatchingInterfaceProps {
+export interface MatchingInterfaceProps {
   onMatchFound?: (chatRoomId: string) => void
+  isMatching?: boolean
+  onStartMatching?: (preferences?: { roles: string[]; skipPreviousMatches: boolean }) => Promise<void>
+  onStopMatching?: () => Promise<void>
+  textOnlyMode?: boolean
 }
 
-export function MatchingInterface({ onMatchFound }: MatchingInterfaceProps) {
+export function MatchingInterface({
+  onMatchFound,
+  isMatching: externalIsMatching,
+  onStartMatching: externalStartMatching,
+  onStopMatching: externalStopMatching,
+  textOnlyMode = false,
+}: MatchingInterfaceProps) {
   const { firebaseUser } = useFirebaseUser()
   const router = useRouter()
   const [selectedRoles, setSelectedRoles] = useState<string[]>([])
   const [skipPrevious, setSkipPrevious] = useState(true)
-  const [currentTheme, setCurrentTheme] = useState<keyof typeof themes>("modern")
-  const [isDarkMode, setIsDarkMode] = useState(false)
+  const [currentTheme] = useState<keyof typeof themes>("modern")
+  const [isDarkMode] = useState(false)
 
   const theme = themes[currentTheme]
 
@@ -98,10 +108,19 @@ export function MatchingInterface({ onMatchFound }: MatchingInterfaceProps) {
       }
     : null
 
-  const { isSearching, matchFound, error, startMatching, stopMatching, resetMatch } = useMatching(
+  const {
+    isSearching: internalIsSearching,
+    matchFound,
+    error,
+    startMatching: internalStartMatching,
+    stopMatching: internalStopMatching,
+    resetMatch,
+  } = useMatching(
     firebaseUser?.id || "",
     userDetails || ({} as any),
   )
+
+  const isSearching = externalIsMatching !== undefined ? externalIsMatching : internalIsSearching
 
   const roleOptions = [
     { value: "alumni", label: "Alumni", icon: Crown, color: "from-indigo-500 to-purple-500" },
@@ -111,10 +130,23 @@ export function MatchingInterface({ onMatchFound }: MatchingInterfaceProps) {
   ]
 
   const handleStartMatching = () => {
-    startMatching({
+    const prefs = {
       roles: selectedRoles,
       skipPreviousMatches: skipPrevious,
-    })
+    }
+    if (externalStartMatching) {
+      externalStartMatching(prefs)
+    } else {
+      internalStartMatching(prefs)
+    }
+  }
+
+  const handleStopMatching = () => {
+    if (externalStopMatching) {
+      externalStopMatching()
+    } else {
+      internalStopMatching()
+    }
   }
 
   const handleMatchFound = (chatRoomId: string) => {
@@ -122,7 +154,11 @@ export function MatchingInterface({ onMatchFound }: MatchingInterfaceProps) {
     if (onMatchFound) {
       onMatchFound(chatRoomId)
     } else {
-      router.push("/chat")
+      if (textOnlyMode) {
+        router.push("/chat")
+      } else {
+        router.push(`/video-chat/${chatRoomId}`)
+      }
     }
   }
 
@@ -180,7 +216,7 @@ export function MatchingInterface({ onMatchFound }: MatchingInterfaceProps) {
 
           <Button 
             variant="outline" 
-            onClick={stopMatching} 
+            onClick={handleStopMatching} 
             className="w-full border-border/20 text-foreground hover:bg-muted/50"
           >
             <X className="w-4 h-4 mr-2" />

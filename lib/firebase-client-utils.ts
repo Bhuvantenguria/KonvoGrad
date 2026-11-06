@@ -14,6 +14,9 @@ import {
   serverTimestamp,
   type Timestamp,
   type QueryDocumentSnapshot,
+  type QuerySnapshot,
+  type DocumentData,
+  type DocumentSnapshot,
 } from "firebase/firestore"
 import { db } from "./firebase"
 import { uploadImage, uploadFile } from "./cloudinary"
@@ -26,7 +29,7 @@ export interface User {
   firstName: string
   lastName: string
   imageUrl?: string
-  role: "alumni" | "developer" | "student" | "professional"
+  role: "alumni" | "developer" | "student" | "professional" | "admin"
   company?: string
   position?: string
   college?: string
@@ -134,8 +137,8 @@ export const getUserByClerkIdClient = async (clerkId: string): Promise<User | nu
 
     if (querySnapshot.empty) return null
 
-    const doc = querySnapshot.docs[0]
-    return { id: doc.id, ...doc.data() } as User
+    const userDoc = querySnapshot.docs[0]
+    return { id: userDoc.id, ...userDoc.data() } as User
   } catch (error) {
     console.error("Error getting user by clerk ID:", error)
     throw error
@@ -244,10 +247,10 @@ export const getUserChatRoomsClient = (userId: string, callback: (chatRooms: Cha
     orderBy("updatedAt", "desc")
   )
 
-  return onSnapshot(q, (querySnapshot) => {
+  return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
     const chatRooms: ChatRoom[] = []
-    querySnapshot.forEach((doc) => {
-      chatRooms.push({ id: doc.id, ...doc.data() } as ChatRoom)
+    querySnapshot.forEach((docSnap: QueryDocumentSnapshot<DocumentData>) => {
+      chatRooms.push({ id: docSnap.id, ...docSnap.data() } as ChatRoom)
     })
     callback(chatRooms)
   })
@@ -273,50 +276,51 @@ export const sendMessageClient = async (
   senderName: string,
   text: string,
   type: Message["type"] = "text",
-  file?: File
+  mediaFile?: File
 ): Promise<string> => {
   try {
     let mediaUrl: string | undefined
     let fileName: string | undefined
     let fileSize: number | undefined
 
-    // Handle file uploads to Cloudinary
-    if (file && type !== "text") {
+    if (mediaFile) {
+      fileName = mediaFile.name
+      fileSize = mediaFile.size
+
       if (type === "image") {
-        mediaUrl = await uploadImage(file, "chat-images")
+        mediaUrl = await uploadImage(mediaFile)
       } else {
-        mediaUrl = await uploadFile(file, "chat-files")
-        fileName = file.name
-        fileSize = file.size
+        mediaUrl = await uploadFile(mediaFile)
       }
     }
 
-    // Add message to messages collection
-    const messageRef = await addDoc(collection(db, "messages"), {
+    const messageData: any = {
       chatRoomId,
       senderId,
       senderName,
       text,
       type,
-      mediaUrl,
-      fileName,
-      fileSize,
       timestamp: serverTimestamp(),
       isRead: false,
       readBy: [senderId],
-    })
+    }
 
-    // Update chat room with last message
-    await updateDoc(doc(db, "chatRooms", chatRoomId), {
+    if (mediaUrl) messageData.mediaUrl = mediaUrl
+    if (fileName) messageData.fileName = fileName
+    if (fileSize) messageData.fileSize = fileSize
+
+    const docRef = await addDoc(collection(db, "messages"), messageData)
+
+    // Update last message in chat room
+    await updateChatRoomClient(chatRoomId, {
       lastMessage: {
-        text,
+        text: type === "text" ? text : `Sent a ${type}`,
         senderId,
-        timestamp: serverTimestamp(),
+        timestamp: serverTimestamp() as any,
       },
-      updatedAt: serverTimestamp(),
     })
 
-    return messageRef.id
+    return docRef.id
   } catch (error) {
     console.error("Error sending message:", error)
     throw error
@@ -331,13 +335,17 @@ export const getChatMessagesClient = (chatRoomId: string, callback: (messages: M
     limit(limitCount)
   )
 
-  return onSnapshot(q, (querySnapshot) => {
+  return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
     const messages: Message[] = []
-    querySnapshot.forEach((doc) => {
-      messages.push({ id: doc.id, ...doc.data() } as Message)
+    querySnapshot.forEach((docSnap: QueryDocumentSnapshot<DocumentData>) => {
+      messages.push({ id: docSnap.id, ...docSnap.data() } as Message)
     })
     // Sort by timestamp ascending for display
-    messages.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis())
+    messages.sort((a, b) => {
+      const aTime = a.timestamp?.toMillis ? a.timestamp.toMillis() : 0
+      const bTime = b.timestamp?.toMillis ? b.timestamp.toMillis() : 0
+      return aTime - bTime
+    })
     callback(messages)
   })
 }
@@ -352,12 +360,12 @@ export const markMessagesAsReadClient = async (chatRoomId: string, userId: strin
     )
 
     const querySnapshot = await getDocs(q)
-    const updatePromises = querySnapshot.docs.map((doc) => {
-      const messageData = doc.data()
+    const updatePromises = querySnapshot.docs.map((docSnap: QueryDocumentSnapshot<DocumentData>) => {
+      const messageData = docSnap.data()
       const readBy = messageData.readBy || []
       if (!readBy.includes(userId)) {
         readBy.push(userId)
-        return updateDoc(doc.ref, {
+        return updateDoc(docSnap.ref, {
           isRead: true,
           readBy,
         })
@@ -387,6 +395,7 @@ export const formatTimestamp = (timestamp: Timestamp): string => {
 
 // Matching functions
 export interface MatchingQueue {
+  id?: string
   userId: string
   userDetails: {
     name: string
@@ -446,8 +455,8 @@ export const findRandomMatchClient = async (userId: string, preferences: any): P
     
     // Filter out the current user after fetching
     const availableUsers = querySnapshot.docs
-      .map(doc => ({ id: doc.id, ...doc.data() }))
-      .filter(user => user.userId !== userId)
+      .map((docSnap: QueryDocumentSnapshot<DocumentData>) => ({ id: docSnap.id, ...(docSnap.data() as any) }))
+      .filter((user: any) => user.userId !== userId)
     
     if (availableUsers.length === 0) return null
     
@@ -469,24 +478,33 @@ export const createMatchAndChatRoomClient = async (
     // Create chat room
     const participantDetails = {
       [userId1]: {
-        name: user1Details.name,
-        imageUrl: user1Details.imageUrl,
+        name: user1Details?.name || "User 1",
+        imageUrl: user1Details?.imageUrl || "",
         isOnline: true,
-        role: user1Details.role,
+        role: user1Details?.role || "professional",
       },
       [userId2]: {
-        name: user2Details.name,
-        imageUrl: user2Details.imageUrl,
+        name: user2Details?.name || "User 2",
+        imageUrl: user2Details?.imageUrl || "",
         isOnline: true,
-        role: user2Details.role,
+        role: user2Details?.role || "professional",
       },
     }
     
     const chatRoomId = await createChatRoomClient("direct", [userId1, userId2], participantDetails)
     
-    // Remove both users from matching queue
-    await leaveMatchingQueueClient(userId1)
-    await leaveMatchingQueueClient(userId2)
+    // Update both queue entries to matched with the newly created chatRoomId
+    await updateDoc(doc(db, "matchingQueue", userId1), {
+      status: "matched",
+      chatRoomId,
+      updatedAt: serverTimestamp(),
+    })
+    
+    await updateDoc(doc(db, "matchingQueue", userId2), {
+      status: "matched",
+      chatRoomId,
+      updatedAt: serverTimestamp(),
+    })
     
     return chatRoomId
   } catch (error) {
@@ -498,9 +516,9 @@ export const createMatchAndChatRoomClient = async (
 export const getMatchingQueueStatusClient = (userId: string, callback: (status: MatchingQueue | null) => void) => {
   const docRef = doc(db, "matchingQueue", userId)
   
-  return onSnapshot(docRef, (docSnap) => {
+  return onSnapshot(docRef, (docSnap: DocumentSnapshot<DocumentData>) => {
     if (docSnap.exists()) {
-      callback({ id: docSnap.id, ...docSnap.data() } as MatchingQueue)
+      callback({ id: docSnap.id, ...(docSnap.data() as any) } as MatchingQueue)
     } else {
       callback(null)
     }

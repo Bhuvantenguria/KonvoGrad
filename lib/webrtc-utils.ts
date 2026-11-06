@@ -1,7 +1,17 @@
 "use client"
 
 import { db } from "./firebase"
-import { collection, addDoc, onSnapshot, serverTimestamp } from "firebase/firestore"
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  serverTimestamp,
+  query,
+  where,
+  type QuerySnapshot,
+  type DocumentData,
+  type DocumentChange,
+} from "firebase/firestore"
 
 export interface WebRTCSignal {
   id: string
@@ -22,6 +32,9 @@ export class WebRTCManager {
   private remoteUserId: string
   private onRemoteStreamCallback?: (stream: MediaStream) => void
   private onCallEndCallback?: () => void
+  private onCallRequestCallback?: (data: any) => void
+  private onCallAcceptCallback?: (data: any) => void
+  private onCallRejectCallback?: (data: any) => void
   private signalUnsubscribe?: () => void
 
   constructor(chatRoomId: string, userId: string, remoteUserId: string) {
@@ -70,7 +83,7 @@ export class WebRTCManager {
       }
 
       // Try to get user media with fallback options
-      let constraints = {
+      const constraints: MediaStreamConstraints = {
         video: video ? { 
           width: { ideal: 1280, max: 1920 },
           height: { ideal: 720, max: 1080 },
@@ -89,7 +102,7 @@ export class WebRTCManager {
         console.warn("Failed with ideal constraints, trying fallback:", error)
         
         // Fallback to basic constraints
-        const fallbackConstraints = {
+        const fallbackConstraints: MediaStreamConstraints = {
           video: video ? true : false,
           audio: audio ? true : false,
         }
@@ -201,14 +214,18 @@ export class WebRTCManager {
   }
 
   private listenForSignals() {
-    const signalsRef = collection(db, "webrtcSignals")
+    // Only listen for signals directed to this user and for this chatRoom
+    const signalsQuery = query(
+      collection(db, "webrtcSignals"),
+      where("receiverId", "==", this.userId),
+      where("chatRoomId", "==", this.chatRoomId)
+    )
 
-    this.signalUnsubscribe = onSnapshot(signalsRef, (snapshot) => {
-      snapshot.docChanges().forEach(async (change) => {
+    this.signalUnsubscribe = onSnapshot(signalsQuery, (snapshot: QuerySnapshot<DocumentData>) => {
+      snapshot.docChanges().forEach(async (change: DocumentChange<DocumentData>) => {
         if (change.type === "added") {
           const signal = { id: change.doc.id, ...change.doc.data() } as WebRTCSignal
 
-          // Only process signals meant for this user
           if (signal.receiverId === this.userId && signal.chatRoomId === this.chatRoomId) {
             await this.handleSignal(signal)
           }
@@ -220,6 +237,21 @@ export class WebRTCManager {
   private async handleSignal(signal: WebRTCSignal) {
     try {
       switch (signal.type) {
+        case "call-request":
+          if (this.onCallRequestCallback) {
+            this.onCallRequestCallback(signal.data)
+          }
+          break
+        case "call-accept":
+          if (this.onCallAcceptCallback) {
+            this.onCallAcceptCallback(signal.data)
+          }
+          break
+        case "call-reject":
+          if (this.onCallRejectCallback) {
+            this.onCallRejectCallback(signal.data)
+          }
+          break
         case "offer":
           await this.createAnswer(signal.data.offer)
           break
@@ -264,6 +296,12 @@ export class WebRTCManager {
   }
 
   cleanup() {
+    // Unsubscribe from signaling listener
+    if (this.signalUnsubscribe) {
+      this.signalUnsubscribe()
+      this.signalUnsubscribe = undefined
+    }
+
     // Stop all local tracks
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => {
@@ -281,6 +319,9 @@ export class WebRTCManager {
     // Clear callbacks
     this.onRemoteStreamCallback = undefined;
     this.onCallEndCallback = undefined;
+    this.onCallRequestCallback = undefined;
+    this.onCallAcceptCallback = undefined;
+    this.onCallRejectCallback = undefined;
   }
 
   onRemoteStream(callback: (stream: MediaStream) => void) {
@@ -289,6 +330,18 @@ export class WebRTCManager {
 
   onCallEnd(callback: () => void) {
     this.onCallEndCallback = callback
+  }
+
+  onCallRequest(callback: (data: any) => void) {
+    this.onCallRequestCallback = callback
+  }
+
+  onCallAccept(callback: (data: any) => void) {
+    this.onCallAcceptCallback = callback
+  }
+
+  onCallReject(callback: (data: any) => void) {
+    this.onCallRejectCallback = callback
   }
 
   getLocalStream() {

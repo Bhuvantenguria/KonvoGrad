@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 
 // LinkedIn OAuth configuration
-const LINKEDIN_CLIENT_ID = process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_ID
-const LINKEDIN_CLIENT_SECRET = process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_SECRET
-const LINKEDIN_REDIRECT_URI = process.env.NEXT_PUBLIC_LINKEDIN_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL}/api/linkedin/callback`
+const LINKEDIN_CLIENT_ID = process.env.LINKEDIN_CLIENT_ID || process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_ID
+const LINKEDIN_CLIENT_SECRET = process.env.LINKEDIN_CLIENT_SECRET || process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_SECRET
+const LINKEDIN_REDIRECT_URI = process.env.NEXT_PUBLIC_LINKEDIN_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/linkedin/callback`
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,8 +24,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Generate LinkedIn OAuth URL with NO scope - just basic profile access
-    const linkedinAuthUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${LINKEDIN_CLIENT_ID}&redirect_uri=${encodeURIComponent(LINKEDIN_REDIRECT_URI)}&state=${userId}`
+    // Generate LinkedIn OAuth URL with openid profile email scopes
+    const scope = encodeURIComponent("openid profile email")
+    const linkedinAuthUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${LINKEDIN_CLIENT_ID}&redirect_uri=${encodeURIComponent(LINKEDIN_REDIRECT_URI)}&state=${userId}&scope=${scope}`
 
     return NextResponse.json({ authUrl: linkedinAuthUrl })
   } catch (error) {
@@ -70,30 +71,42 @@ export async function POST(request: NextRequest) {
     })
 
     if (!tokenResponse.ok) {
+      const errText = await tokenResponse.text()
+      console.error("Failed to get access token from LinkedIn:", errText)
       throw new Error("Failed to get access token")
     }
 
     const tokenData = await tokenResponse.json()
     const accessToken = tokenData.access_token
 
-    // Try to get basic profile info - this might fail without proper scopes
+    // Try OpenID userinfo first, then legacy /v2/me
     let profileData: any = {}
     let hasProfile = false
     
     try {
-      const profileResponse = await fetch("https://api.linkedin.com/v2/me", {
+      const userinfoResponse = await fetch("https://api.linkedin.com/v2/userinfo", {
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          "X-Restli-Protocol-Version": "2.0.0",
         },
       })
       
-      if (profileResponse.ok) {
-        profileData = await profileResponse.json()
+      if (userinfoResponse.ok) {
+        profileData = await userinfoResponse.json()
         hasProfile = true
+      } else {
+        const meResponse = await fetch("https://api.linkedin.com/v2/me", {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "X-Restli-Protocol-Version": "2.0.0",
+          },
+        })
+        if (meResponse.ok) {
+          profileData = await meResponse.json()
+          hasProfile = true
+        }
       }
     } catch (error) {
-      console.log("Could not fetch detailed profile, but user is authenticated")
+      console.log("Could not fetch detailed profile, but user is authenticated:", error)
     }
 
     // If we can't get profile data, just validate the connection
@@ -112,9 +125,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       profile: {
-        id: profileData.id || "linkedin_verified",
-        firstName: profileData.localizedFirstName || "LinkedIn",
-        lastName: profileData.localizedLastName || "User",
+        id: profileData.sub || profileData.id || "linkedin_verified",
+        firstName: profileData.given_name || profileData.localizedFirstName || "LinkedIn",
+        lastName: profileData.family_name || profileData.localizedLastName || "User",
         message: "Profile imported from LinkedIn"
       },
     })
