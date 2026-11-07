@@ -79,6 +79,17 @@ export function VideoCallInterface({
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
+  const formatMessageTime = (ts: any) => {
+    if (!ts) return ""
+    if (typeof ts?.toDate === "function") return ts.toDate().toLocaleTimeString()
+    if (ts instanceof Date) return ts.toLocaleTimeString()
+    try {
+      return new Date(ts).toLocaleTimeString()
+    } catch {
+      return ""
+    }
+  }
+
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream
@@ -241,7 +252,7 @@ export function VideoCallInterface({
                         >
                           <p className="text-sm">{message.text}</p>
                           <p className="text-xs opacity-70 mt-1">
-                            {new Date(message.timestamp).toLocaleTimeString()}
+                            {formatMessageTime(message.timestamp)}
                           </p>
                         </div>
                       </div>

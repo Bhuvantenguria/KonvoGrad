@@ -731,12 +731,24 @@ export const searchUsers = async (
 }
 
 // Utility functions
-export const formatTimestamp = (timestamp: Timestamp): string => {
+export const formatTimestamp = (timestamp: any): string => {
   if (!timestamp) return ""
-  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  let date: Date
+  if (typeof timestamp?.toDate === "function") {
+    date = timestamp.toDate()
+  } else if (timestamp instanceof Date) {
+    date = timestamp
+  } else if (typeof timestamp === "string" || typeof timestamp === "number") {
+    date = new Date(timestamp)
+  } else if (typeof timestamp?.seconds === "number") {
+    date = new Date(timestamp.seconds * 1000)
+  } else {
+    date = new Date()
+  }
   const now = new Date()
   const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
   
+  if (isNaN(diffInHours)) return ""
   if (diffInHours < 1) return "Just now"
   if (diffInHours < 24) return `${Math.floor(diffInHours)}h ago`
   if (diffInHours < 168) return `${Math.floor(diffInHours / 24)}d ago`

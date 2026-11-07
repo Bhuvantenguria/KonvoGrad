@@ -36,6 +36,18 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
     }
   }
 
+  const getNotificationDate = (raw: any): Date => {
+    if (!raw) return new Date()
+    if (typeof raw?.toDate === "function") return raw.toDate()
+    if (raw instanceof Date) return raw
+    try {
+      const d = new Date(raw)
+      return isNaN(d.getTime()) ? new Date() : d
+    } catch {
+      return new Date()
+    }
+  }
+
   const handleNotificationClick = (notification: any) => {
     markAsRead(notification.id)
     setIsOpen(false)
@@ -92,7 +104,7 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
                             </div>
                             <p className="text-sm text-muted-foreground">{notification.body}</p>
                             <p className="text-xs text-muted-foreground">
-                              {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                              {formatDistanceToNow(getNotificationDate(notification.createdAt), { addSuffix: true })}
                             </p>
                           </div>
                         </div>

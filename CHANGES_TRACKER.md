@@ -186,6 +186,11 @@
 - Resolved `QueryDocumentSnapshot` document data type erasure in `findRandomMatch`. Imported `type DocumentData` and typed `QueryDocumentSnapshot<DocumentData>`, safely casting `(d.data() as any)` and accessing `(availableUsers[randomIndex] as any)?.userId`.
 - Parameterized all remaining `QueryDocumentSnapshot` and `QuerySnapshot` references with `<DocumentData>` to eliminate type errors on strict builds.
 
+### 31. `KonvoGrad/lib/firebase-utils.ts`, `lib/firebase-client-utils.ts`, `components/video-chat/video-call-interface.tsx`, `components/notifications/notification-center.tsx`, & `app/chat/page.tsx`
+- Resolved TypeScript overload error: `No overload matches this call. Argument of type 'Timestamp' is not assignable to parameter of type 'string | number | Date'` when `new Date(timestamp)` was called with a Firestore `Timestamp` instance.
+- Implemented universal, polymorphic date resolution in `formatTimestamp(timestamp: any)` across `lib/firebase-utils.ts` and `lib/firebase-client-utils.ts` handling Firestore `Timestamp` (`.toDate()`), native `Date` instances, epoch numbers (seconds/milliseconds), and ISO strings with NaN guards.
+- Hardened message and notification timestamp rendering in UI components (`video-call-interface.tsx`, `notification-center.tsx`, and `app/chat/page.tsx`) with defensive converters to prevent hydration and runtime crashes.
+
 ---
 
 ## 🧪 3. Route & Endpoint Verification Matrix

@@ -281,8 +281,10 @@ export default function ChatPage() {
                   {messages.length > 0 ? (
                     messages.map((message) => {
                       const isOwnMessage = message.senderId === firebaseUser?.id
-                      const timeStr = message.timestamp?.toDate
-                        ? formatDistanceToNow(message.timestamp.toDate(), { addSuffix: true })
+                      const timeStr = typeof (message.timestamp as any)?.toDate === "function"
+                        ? formatDistanceToNow((message.timestamp as any).toDate(), { addSuffix: true })
+                        : message.timestamp instanceof Date
+                        ? formatDistanceToNow(message.timestamp, { addSuffix: true })
                         : "Just now"
 
                       return (
