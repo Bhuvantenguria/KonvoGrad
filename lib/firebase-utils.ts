@@ -15,6 +15,7 @@ import {
   type Timestamp,
   type QueryDocumentSnapshot,
   type QuerySnapshot,
+  type DocumentData,
 } from "firebase/firestore"
 import { db } from "./firebase"
 import { uploadImage, uploadFile } from "./cloudinary"
@@ -209,7 +210,7 @@ export const getAllUsers = async (limitCount = 200): Promise<User[]> => {
     const q = query(collection(db, "users"), limit(limitCount))
     const snapshot = await getDocs(q)
     const users: User[] = []
-    snapshot.forEach((d: QueryDocumentSnapshot) => {
+    snapshot.forEach((d: QueryDocumentSnapshot<DocumentData>) => {
       users.push({ id: d.id, ...(d.data() as Omit<User, "id">) })
     })
     return users
@@ -229,13 +230,13 @@ export const getAdminStats = async (): Promise<AdminStats> => {
     ])
 
     let activeUsers = 0
-    usersSnap.forEach((d: QueryDocumentSnapshot) => {
+    usersSnap.forEach((d: QueryDocumentSnapshot<DocumentData>) => {
       const data = d.data() as User
       if (data.isOnline) activeUsers++
     })
 
     let activeChatRooms = 0
-    chatRoomsSnap.forEach((d: QueryDocumentSnapshot) => {
+    chatRoomsSnap.forEach((d: QueryDocumentSnapshot<DocumentData>) => {
       const data = d.data() as ChatRoom
       if (data.isActive) activeChatRooms++
     })
@@ -265,7 +266,7 @@ export const getAllReports = async (): Promise<UserReport[]> => {
   try {
     const snapshot = await getDocs(collection(db, "reports"))
     const reports: UserReport[] = []
-    snapshot.forEach((d: QueryDocumentSnapshot) => {
+    snapshot.forEach((d: QueryDocumentSnapshot<DocumentData>) => {
       reports.push({ id: d.id, ...(d.data() as Omit<UserReport, "id">) })
     })
     return reports
@@ -361,13 +362,13 @@ export const findRandomMatch = async (userId: string, preferences: any): Promise
     if (querySnapshot.empty) return null
     
     const availableUsers = querySnapshot.docs
-      .map((d: QueryDocumentSnapshot) => ({ id: d.id, ...d.data() }))
+      .map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...(d.data() as any) }))
       .filter((user: any) => user.isActive && user.userId !== userId)
     
     if (availableUsers.length === 0) return null
     
     const randomIndex = Math.floor(Math.random() * availableUsers.length)
-    return availableUsers[randomIndex].userId
+    return (availableUsers[randomIndex] as any)?.userId || null
   } catch (error) {
     console.error("Error finding random match:", error)
     throw error
@@ -453,10 +454,10 @@ export const getUserChatRooms = (userId: string, callback: (chatRooms: ChatRoom[
     orderBy("updatedAt", "desc")
   )
 
-  return onSnapshot(q, (querySnapshot: QuerySnapshot) => {
+  return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
     const chatRooms: ChatRoom[] = []
-    querySnapshot.forEach((d: QueryDocumentSnapshot) => {
-      chatRooms.push({ id: d.id, ...d.data() } as ChatRoom)
+    querySnapshot.forEach((d: QueryDocumentSnapshot<DocumentData>) => {
+      chatRooms.push({ id: d.id, ...(d.data() as any) } as ChatRoom)
     })
     callback(chatRooms)
   })
@@ -546,10 +547,10 @@ export const getChatMessages = (chatRoomId: string, callback: (messages: Message
     limit(limitCount)
   )
 
-  return onSnapshot(q, (querySnapshot: QuerySnapshot) => {
+  return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
     const messages: Message[] = []
-    querySnapshot.forEach((d: QueryDocumentSnapshot) => {
-      messages.push({ id: d.id, ...d.data() } as Message)
+    querySnapshot.forEach((d: QueryDocumentSnapshot<DocumentData>) => {
+      messages.push({ id: d.id, ...(d.data() as any) } as Message)
     })
     messages.sort((a, b) => a.timestamp?.toMillis?.() - b.timestamp?.toMillis?.())
     callback(messages)
@@ -565,7 +566,7 @@ export const markMessagesAsRead = async (chatRoomId: string, userId: string): Pr
     )
 
     const querySnapshot = await getDocs(q)
-    const updatePromises = querySnapshot.docs.map((d: QueryDocumentSnapshot) => {
+    const updatePromises = querySnapshot.docs.map((d: QueryDocumentSnapshot<DocumentData>) => {
       const messageData = d.data() as Message
       if (messageData.senderId !== userId) {
         const readBy = messageData.readBy || []
@@ -641,15 +642,15 @@ export const getUserConnections = async (userId: string): Promise<Connection[]> 
     const connections: Connection[] = []
     const seen = new Set<string>()
 
-    snap1.forEach((d: QueryDocumentSnapshot) => {
+    snap1.forEach((d: QueryDocumentSnapshot<DocumentData>) => {
       seen.add(d.id)
-      connections.push({ id: d.id, ...d.data() } as Connection)
+      connections.push({ id: d.id, ...(d.data() as any) } as Connection)
     })
 
-    snap2.forEach((d: QueryDocumentSnapshot) => {
+    snap2.forEach((d: QueryDocumentSnapshot<DocumentData>) => {
       if (!seen.has(d.id)) {
         seen.add(d.id)
-        connections.push({ id: d.id, ...d.data() } as Connection)
+        connections.push({ id: d.id, ...(d.data() as any) } as Connection)
       }
     })
 
@@ -712,7 +713,7 @@ export const searchUsers = async (
     const querySnapshot = await getDocs(q)
     const users: User[] = []
     
-    querySnapshot.forEach((d: QueryDocumentSnapshot) => {
+    querySnapshot.forEach((d: QueryDocumentSnapshot<DocumentData>) => {
       const userData = d.data() as User
       if (d.id !== currentUserId) {
         const searchableText = `${userData.firstName || ""} ${userData.lastName || ""} ${(userData.skills || []).join(" ")} ${userData.company || ""}`.toLowerCase()

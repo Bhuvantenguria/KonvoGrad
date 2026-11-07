@@ -182,6 +182,10 @@
 - Resolved `Timestamp` vs `Date` type mismatch on `User.lastSeen`. Exported `Timestamp` from `firebase-client-utils` and used `Timestamp.now()` in `use-firebase-user.ts`.
 - Expanded `User` timestamp properties (`lastSeen`, `createdAt`, `updatedAt`, `suspendedAt`, `unsuspendedAt`) to accept `Timestamp | Date | any` across both client and server utility definitions.
 
+### 30. `KonvoGrad/lib/firebase-utils.ts`
+- Resolved `QueryDocumentSnapshot` document data type erasure in `findRandomMatch`. Imported `type DocumentData` and typed `QueryDocumentSnapshot<DocumentData>`, safely casting `(d.data() as any)` and accessing `(availableUsers[randomIndex] as any)?.userId`.
+- Parameterized all remaining `QueryDocumentSnapshot` and `QuerySnapshot` references with `<DocumentData>` to eliminate type errors on strict builds.
+
 ---
 
 ## 🧪 3. Route & Endpoint Verification Matrix
